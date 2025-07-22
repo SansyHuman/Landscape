@@ -1,32 +1,9 @@
 from matplotlib import pyplot as plt
-from sklearn.datasets import make_blobs
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
+from common.utils import prime_numbers
 import numpy as np
 import csv
-import math
-
-
-def prime_numbers(n: int) -> list[int]:
-    if n <= 0:
-        return []
-    primes = [2]
-    for i in range(1, n):
-        candidate = primes[-1] + 1
-        while True:
-            is_prime = True
-            for p in primes:
-                if p > math.sqrt(candidate):
-                    break
-                if candidate % p == 0:
-                    is_prime = False
-                    break
-            if is_prime:
-                primes.append(candidate)
-                break
-            candidate += 1
-
-    return primes
 
 data = None
 with open("landscape_SU2adj1nf2.csv") as csvfile:

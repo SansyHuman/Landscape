@@ -1,36 +1,13 @@
 import csv
-import math
 import os.path
-import random
+from common.utils import prime_numbers
+import math
 
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-
-def prime_numbers(n: int) -> list[int]:
-    if n <= 0:
-        return []
-    primes = [2]
-    for i in range(1, n):
-        prime = primes[-1] + 1
-        while True:
-            is_prime = True
-            for p in primes:
-                if p > math.sqrt(prime):
-                    break
-                if prime % p == 0:
-                    is_prime = False
-                    break
-
-            if is_prime:
-                primes.append(prime)
-                break
-
-            prime += 1
-
-    return primes
 
 data = None
 with open("landscape_SU2adj1nf2.csv") as csvfile:
@@ -229,6 +206,11 @@ for epoch in range(1):
         }, './checkpoint.tar')
 
 test_w = torch.tensor(superpotentials_refined).to(device).float()
+
+checkpoint = torch.load('./checkpoint.tar')
+cc_model.load_state_dict(checkpoint['model_state_dict'])
+optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+best_loss = checkpoint['best_loss']
 
 with torch.no_grad():
     ac_expect = cc_model(test_w)

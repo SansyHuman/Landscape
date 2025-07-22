@@ -1,50 +1,8 @@
 from matplotlib import pyplot as plt
-from sklearn.datasets import make_blobs
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
+from common.utils import prime_numbers
 import numpy as np
 import csv
-import math
-
-'''
-data = make_blobs(n_samples=1000, n_features=3, centers=4, cluster_std=1.8, random_state=82)
-
-kmeans = KMeans(n_clusters=4)
-kmeans.fit(data[0])
-print(kmeans.cluster_centers_)
-print(kmeans.labels_)
-
-fig = plt.figure(figsize=(20,14))
-ax1 = fig.add_subplot(121, projection='3d')
-ax2 = fig.add_subplot(122, projection='3d')
-
-ax1.set_title('K Means')
-ax2.set_title('Original')
-ax1.scatter(data[0][:, 0], data[0][:, 1], data[0][:, 2], c=kmeans.labels_, cmap='rainbow')
-ax2.scatter(data[0][:, 0], data[0][:, 1], data[0][:, 2], c=data[1], cmap='rainbow')
-plt.show()
-'''
-
-def prime_numbers(n: int) -> list[int]:
-    if n <= 0:
-        return []
-    primes = [2]
-    for i in range(1, n):
-        candidate = primes[-1] + 1
-        while True:
-            is_prime = True
-            for p in primes:
-                if p > math.sqrt(candidate):
-                    break
-                if candidate % p == 0:
-                    is_prime = False
-                    break
-            if is_prime:
-                primes.append(candidate)
-                break
-            candidate += 1
-
-    return primes
 
 data = None
 with open("landscape_SU2adj1nf2.csv") as csvfile:
