@@ -1,4 +1,3 @@
-from common.utils import *
 from common.sci_parser import *
 
 x = Term(3.5, Monomial('x', 1.2), Monomial('x', 1.5), Monomial('y', 2.2))
@@ -25,3 +24,4 @@ print(f'marginal-flavor: {sci.num_dim3_minus_f}')
 print(f'total number of relevant operators: {sci.num_relevant_ops}')
 print(f'dimensions of relevant operators: {sci.relevant_dims}')
 print(f'relevant spectrum: {sci.relevant_spectrum}')
+print(f'smallest dimension: {sci.smallest_dim}')

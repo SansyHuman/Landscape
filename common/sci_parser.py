@@ -20,7 +20,10 @@ class SuperConformalIndex:
                     filter(lambda term2: term2.exponent('t') is not None, self.index.terms))
         )
         # # of marginal operators - rank of IR flavor symmetry
-        self.num_dim3_minus_f = self.index.find_with(marginal)[0].coefficient
+        self.num_dim3_minus_f = 0
+        marginal_term = self.index.find_with(marginal)
+        if len(marginal_term) > 0:
+            self.num_dim3_minus_f = round(self.index.find_with(marginal)[0].coefficient)
 
         # dimensions of relevant operators
         self.relevant_dims: set[float] = set()
@@ -40,3 +43,5 @@ class SuperConformalIndex:
                 else:
                     self.relevant_spectrum[dim] = cnt
                 self.num_relevant_ops += cnt
+        # smallest dimension among all operators
+        self.smallest_dim = min(self.relevant_dims)

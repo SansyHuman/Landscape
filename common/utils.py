@@ -212,13 +212,13 @@ def to_poly(expr: str) -> Polynomial:
             expr = expr[next_expr:]
 
         fractions = term_str.split('/')
-        numerator = fractions[0]
+        numerator = fractions[0].strip()
         numerator = numerator.replace('(', '')
         numerator = numerator.replace(')', '')
 
         denominator = None
         if len(fractions) > 1:
-            denominator = fractions[1]
+            denominator = fractions[1].strip()
             if denominator[0] == '(' and denominator[-1] == ')':
                 denominator = denominator[1:-1]
             if denominator[0] != '-':
@@ -240,7 +240,7 @@ def __make_monomials(term: str) -> tuple[float, list[Monomial]]:
     """
     Returns the coefficient and list of monomials
     """
-    multiples = term.split('*')
+    multiples = [s.strip() for s in term.split('*')]
     coefficient = 1
     monomials = []
 
@@ -254,7 +254,7 @@ def __make_monomials(term: str) -> tuple[float, list[Monomial]]:
 
     for i in range(len(multiples)):
         multiple = multiples[i]
-        indet_expo = multiple.split('^')
+        indet_expo = [s.strip() for s in multiple.split('^')]
         if len(indet_expo) == 1:
             monomials.append(Monomial(indet_expo[0], 1))
         else:
