@@ -25,8 +25,8 @@ class SuperConformalIndex:
         if len(marginal_term) > 0:
             self.num_dim3_minus_f = round(self.index.find_with(marginal)[0].coefficient)
 
-        # dimensions of relevant operators
-        self.relevant_dims: set[float] = set()
+        # dimensions of relevant operators in the order of increasing
+        self.relevant_dims: list[float] = []
         # the number of operators with each dimensions
         self.relevant_spectrum: dict[float, int] = dict()
         # total number of relevant operators
@@ -37,11 +37,12 @@ class SuperConformalIndex:
             if dim is not None:
                 dim = dim / 2.0 # t^3R, dim = 3R/2
                 cnt = round(term.coefficient)
-                self.relevant_dims.add(dim)
                 if dim in self.relevant_spectrum:
                     self.relevant_spectrum[dim] += cnt
                 else:
+                    self.relevant_dims.append(dim)
                     self.relevant_spectrum[dim] = cnt
                 self.num_relevant_ops += cnt
+        self.relevant_dims.sort()
         # smallest dimension among all operators
-        self.smallest_dim = min(self.relevant_dims)
+        self.smallest_dim = self.relevant_dims[0]
