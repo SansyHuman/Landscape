@@ -7,8 +7,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.cluster import KMeans
 
+filename = input("Enter file name to load: ")
+
 data = None
-with open("landscape_SU2adj1nf2.csv") as csvfile:
+with open(filename) as csvfile:
     reader = csv.reader(csvfile)
     data = list(reader)
 
@@ -48,7 +50,7 @@ def lightest_ac_ratio(a_charges: list[float], c_charges: list[float], scis: list
 
 def kmeans_second_lightest(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], clusters: int) -> None:
     # simple kmeans with smallest and second smallest dimension
-    two_dims = np.array(list(map(lambda sci: [sci.smallest_dim, sci.relevant_dims[1]], scis)))
+    two_dims = np.array([[sci.smallest_dim, (sci.relevant_dims[1] if len(sci.relevant_dims) > 1 else 0)] for sci in scis])
 
     kmeans = KMeans(n_clusters=clusters)
     kmeans.fit(two_dims)
@@ -70,7 +72,7 @@ def kmeans_second_lightest(a_charges: list[float], c_charges: list[float], scis:
 
 def kmeans_ac_second_lightest(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], clusters: int) -> None:
     # simple kmeans with a, c central charges and smallest and second smallest dimension
-    two_dims = np.array([[a_charges[i], c_charges[i], scis[i].smallest_dim, scis[i].relevant_dims[1]] for i in range(len(scis))])
+    two_dims = np.array([[a_charges[i], c_charges[i], scis[i].smallest_dim, (scis[i].relevant_dims[1] if len(scis[i].relevant_dims) > 1 else 0)] for i in range(len(scis))])
 
     kmeans = KMeans(n_clusters=clusters)
     kmeans.fit(two_dims)
