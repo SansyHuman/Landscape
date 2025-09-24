@@ -1,6 +1,7 @@
 import csv
 import os.path
 import math
+import json
 from common.sci_parser import *
 
 import matplotlib.pyplot as plt
@@ -47,18 +48,62 @@ for i in range(1, len(data)):
 
 print(f"Field contents: {field_contents_index}")
 
+os.makedirs('./data', exist_ok=True)
+
 
 def lightest_ac_ratio(field_contents: list[int], a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex]) -> None:
     # simple plot of a/c and smallest dimension
     ac_ratio = np.array(a_charges)/np.array(c_charges)
     smallest_dim = np.array(list(map(lambda sci: sci.smallest_dim, scis)))
 
+    plt.style.use('default')
+    plt.rcParams['figure.figsize'] = (16, 12)
+    plt.rcParams['font.size'] = 15
+
     plt.scatter(ac_ratio, smallest_dim, s=1, c=field_contents, cmap='Spectral')
     plt.title('Charge ratio - smallest dimension')
     plt.xlabel('a/c')
     plt.ylabel('dimension')
     plt.colorbar()
+
+    plt.savefig(f'data/{filename}_acratio_spectrum.png')
     plt.show()
+
+def __median_sorted(data):
+    n = len(data)
+    if n % 2 == 0:
+        return (data[n // 2 - 1] + data[n // 2]) / 2
+    else:
+        return data[(n - 1) // 2]
+
+
+def save_data(data, data_name: list[str], cluster_obj: KMeans, test_name: str) -> None:
+    # save data of clustering
+    n_clusters = cluster_obj.n_clusters
+    n_data = len(data_name)
+    clustered_data = [[[] for _ in range(n_data)] for _ in range(n_clusters)]
+
+    for i in range(len(data)):
+        cluster = cluster_obj.labels_[i]
+        for j in range(n_data):
+            clustered_data[cluster][j].append(data[i][j])
+
+    json_data = dict()
+    json_data['data_name'] = data_name
+    json_data['clusters'] = [dict() for _ in range(n_clusters)]
+
+    for i in range(n_clusters):
+        json_data['clusters'][i]['num_data'] = len(clustered_data[i][0])
+        json_data['clusters'][i]['center'] = list(cluster_obj.cluster_centers_[i])
+        for j in range(n_data):
+            clustered_data[i][j].sort()
+        json_data['clusters'][i]['min'] = [clustered_data[i][k][0] for k in range(n_data)]
+        json_data['clusters'][i]['max'] = [clustered_data[i][k][-1] for k in range(n_data)]
+        json_data['clusters'][i]['average'] = [np.mean(clustered_data[i][k]) for k in range(n_data)]
+        json_data['clusters'][i]['median'] = [__median_sorted(clustered_data[i][k]) for k in range(n_data)]
+
+        with open(f'./data/{filename}_{test_name}.json', 'w') as json_file:
+            json.dump(json_data, json_file, indent=4)
 
 
 def kmeans_second_lightest(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], clusters: int) -> None:
@@ -91,6 +136,9 @@ def kmeans_second_lightest(a_charges: list[float], c_charges: list[float], scis:
     ax[1].set_title('dimension space')
 
     fig.suptitle('KMeans cluster by first two smallest dimensions')
+
+    save_data(two_dims,['smallest_dim', 'second_smallest_dim'], kmeans, test_name=kmeans_second_lightest.__name__)
+    plt.savefig(f'./data/{filename}_{kmeans_second_lightest.__name__}.png')
 
     plt.show()
 
@@ -128,6 +176,9 @@ def kmeans_ac_second_lightest(a_charges: list[float], c_charges: list[float], sc
 
     fig.suptitle('KMeans cluster by ac charge and first two smallest dimensions')
 
+    save_data(two_dims, ['a_charge', 'c_charge', 'smallest_dim', 'second_smallest_dim'], kmeans, test_name=kmeans_ac_second_lightest.__name__)
+    plt.savefig(f'./data/{filename}_{kmeans_ac_second_lightest.__name__}.png')
+
     plt.show()
 
 
@@ -164,7 +215,13 @@ def kmeans_ac_lightest_num(a_charges: list[float], c_charges: list[float], scis:
     ax[1].set_title('dimension space')
 
     fig.suptitle('KMeans cluster by ac charge and dimension and the number of lightest operator')
+
+    save_data(two_dims, ['a_charge', 'c_charge', 'smallest_dim', 'num_smallest_dim'], kmeans,
+              test_name=kmeans_ac_lightest_num.__name__)
+    plt.savefig(f'./data/{filename}_{kmeans_ac_lightest_num.__name__}.png')
+
     plt.show()
+
 
 while True:
     print("Choose the program.")
