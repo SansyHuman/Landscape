@@ -142,6 +142,7 @@ def kmeans_second_lightest(a_charges: list[float], c_charges: list[float], scis:
 
     plt.show()
 
+
 def kmeans_ac_second_lightest(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], clusters: int) -> None:
     # simple kmeans with a, c central charges and smallest and second smallest dimension
     two_dims = np.array([[a_charges[i], c_charges[i], scis[i].smallest_dim, (scis[i].relevant_dims[1] if len(scis[i].relevant_dims) > 1 else 0)] for i in range(len(scis))])
@@ -178,6 +179,77 @@ def kmeans_ac_second_lightest(a_charges: list[float], c_charges: list[float], sc
 
     save_data(two_dims, ['a_charge', 'c_charge', 'smallest_dim', 'second_smallest_dim'], kmeans, test_name=kmeans_ac_second_lightest.__name__)
     plt.savefig(f'./data/{filename}_{kmeans_ac_second_lightest.__name__}.png')
+
+    plt.show()
+
+
+def kmeans_ac_lightests_matter_contents(field_contents_index: dict[str, int], field_contents: list[int], a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex]) -> None:
+    # simple kmeans with a, c charges and smallest and second smallest dimension and check the ratio of field contents for each cluster
+    clusters = len(field_contents_index)
+    print(f'Number of clusters: {clusters}')
+
+    two_dims = np.array([[a_charges[i], c_charges[i], scis[i].smallest_dim,
+                          (scis[i].relevant_dims[1] if len(scis[i].relevant_dims) > 1 else 0)] for i in
+                         range(len(scis))])
+
+    kmeans = KMeans(n_clusters=clusters)
+    kmeans.fit(two_dims)
+    print(f'Iteration number: {kmeans.n_iter_}')
+    print(f'Cluster centers: {kmeans.cluster_centers_}')
+
+    cluster_numbers = [i + 1 for i in range(clusters)]
+    field_index_contents = dict()
+    for content, index in field_contents_index.items():
+        field_index_contents[index] = content
+
+    cluster_contents = dict()
+    for content in field_contents_index.keys():
+        cluster_contents[content] = np.zeros(clusters)
+
+    for i in range(len(field_contents)):
+        cluster_number = kmeans.labels_[i]
+        field_content = field_contents[i]
+        cluster_contents[field_index_contents[field_content]][cluster_number] += 1
+
+    num_data = np.zeros(clusters)
+    for num in cluster_contents.values():
+        num_data += num
+
+    for content in cluster_contents.keys():
+        cluster_contents[content] /= num_data
+        cluster_contents[content] *= 100
+
+    plt.style.use('default')
+    plt.rcParams['figure.figsize'] = (16, 12)
+    plt.rcParams['font.size'] = 15
+
+    fig, ax = plt.subplots(1, 2, squeeze=True)
+    ax[0].scatter(a_charges, c_charges, s=1, c=kmeans.labels_)
+    ax[0].scatter(kmeans.cluster_centers_[:, 0],
+                  kmeans.cluster_centers_[:, 1],
+                  c='b', marker='x', linewidths=2)
+    ax[0].set_xlabel('a')
+    ax[0].set_ylabel('c')
+    ax[0].tick_params(axis='both', rotation='auto')
+    ax[0].set_title('a-c space')
+
+    bottom = np.zeros(clusters)
+
+    for content, num in cluster_contents.items():
+        p = ax[1].bar(cluster_numbers, num, 0.6, label=content, bottom = bottom)
+        bottom += num
+        ax[1].bar_label(p, fmt='%.2f', label_type='center')
+    ax[0].set_xlabel('Cluster index')
+    ax[0].set_ylabel('Ratio (%)')
+    ax[0].tick_params(axis='both', rotation='auto')
+    ax[1].set_title('matter contents ratio')
+    ax[1].legend()
+
+    fig.suptitle('KMeans cluster by ac charge and first two smallest dimensions')
+
+    save_data(two_dims, ['a_charge', 'c_charge', 'smallest_dim', 'second_smallest_dim'], kmeans,
+              test_name=kmeans_ac_lightests_matter_contents.__name__)
+    plt.savefig(f'./data/{filename}_{kmeans_ac_lightests_matter_contents.__name__}.png')
 
     plt.show()
 
@@ -228,12 +300,13 @@ while True:
     print("1. simple plot of a/c and smallest dimension")
     print("2. simple kmeans with smallest and second smallest dimension")
     print("3. simple kmeans with a, c central charges and smallest and second smallest dimension")
-    print("4. simple kmeans with a, c central charges and dimension and number of lighetst operators")
+    print("4. simple kmeans with a, c central charges and smallest and second smallest dimension and check matter contents ratio")
+    print("5. simple kmeans with a, c central charges and dimension and number of lighetst operators")
     print('-1. exit')
 
     program = int(input(">>"))
     n_clusters = 0
-    if program > 1:
+    if program > 1 and program != 4:
         print("Input the number of clusters.")
         n_clusters = int(input(">>"))
 
@@ -244,6 +317,8 @@ while True:
     elif program == 3:
         kmeans_ac_second_lightest(a_charges, c_charges, scis, n_clusters)
     elif program == 4:
+        kmeans_ac_lightests_matter_contents(field_contents_index, field_contents, a_charges, c_charges, scis)
+    elif program == 5:
         kmeans_ac_lightest_num(a_charges, c_charges, scis, n_clusters)
     elif program == -1:
         break
