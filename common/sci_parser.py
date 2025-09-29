@@ -49,6 +49,9 @@ class SuperConformalIndex:
                         self.relevant_dims.append(dim)
                         self.relevant_spectrum[dim] = cnt
                     self.num_relevant_ops += cnt
+                elif dim > 3.0: # irrelevant
+                    if cnt < 0: # ignore terms with negative coefficients
+                        continue
 
                 tmp_dims.add(dim)
 
