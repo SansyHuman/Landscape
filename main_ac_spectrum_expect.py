@@ -127,7 +127,6 @@ def expect_higher_spectrum(a_charges: list[float], c_charges: list[float], scis:
         print('x shape: ', x.shape, end=' ')
         print('y shape: ', y.shape)
 
-
     model = SpectrumExpectModel(input_dim, output_spectrum_num, input_dim * 3, input_dim * 20, input_dim * 5).to(device)
     print('Higher spectrum expect model shape: ', model(torch.randn(32, input_dim).to(device)).shape)
 
@@ -192,7 +191,6 @@ def expect_higher_spectrum(a_charges: list[float], c_charges: list[float], scis:
     checkpoint = torch.load(checkpoint_file_name)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    best_loss = checkpoint['best_loss']
 
     with torch.no_grad():
         y_expect = model(test_x)
@@ -209,5 +207,136 @@ def expect_higher_spectrum(a_charges: list[float], c_charges: list[float], scis:
         plt.savefig(f'./data/{filename}_spectrum_expectation_{input_spectrum_num}_{output_spectrum_num}.png')
         plt.show()
 
+def expect_ac_charge(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], input_spectrum_num: int, epoch_num: int) -> None:
+    input_data = np.zeros((len(a_charges), input_spectrum_num))
+    output_data = np.zeros((len(a_charges), 2))
 
-expect_higher_spectrum(a_charges, c_charges, scis, 2, 4, 10)
+    for i in range(len(a_charges)):
+        sci = scis[i]
+        for j in range(input_spectrum_num):
+            if j >= len(sci.dims):
+                input_data[i, j] = 0
+            else:
+                input_data[i, j] = sci.dims[j]
+
+        output_data[i, 0] = a_charges[i]
+        output_data[i, 1] = c_charges[i]
+
+    input_train = input_data[0::2, :]
+    output_train = output_data[0::2, :]
+    input_test = input_data[1::2, :]
+    output_test = output_data[1::2, :]
+
+    dataset_train = SpectrumExpectDataset(input_train, output_train)
+    print('Train dataset length:', len(dataset_train))
+    dataset_test = SpectrumExpectDataset(input_test, output_test)
+    print('Test dataset length:', len(dataset_test))
+
+    dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True)
+    dataloader_test = DataLoader(dataset_test, batch_size=32, shuffle=True)
+
+    for index, (x, y) in enumerate(dataloader_train):
+        print(f'{index}/{len(dataloader_train)}', end=' ')
+        print('x shape: ', x.shape, end=' ')
+        print('y shape: ', y.shape)
+
+    model = SpectrumExpectModel(input_spectrum_num, 2, input_spectrum_num * 3, input_spectrum_num * 20, input_spectrum_num * 5).to(device)
+    print('A/C charge expect model shape: ', model(torch.randn(32, input_spectrum_num).to(device)).shape)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    best_loss = 1e10
+
+    checkpoint = None
+    checkpoint_file_name = f'./checkpoint_charge_expect_{input_spectrum_num}.tar'
+    if os.path.isfile(checkpoint_file_name):
+        print('Checkpoint available. Loads checkpoint...')
+        checkpoint = torch.load(checkpoint_file_name)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        best_loss = checkpoint['best_loss']
+
+    for epoch in range(epoch_num):
+        model.train()
+        for x, y in dataloader_train:
+            x = x.to(device)
+            y = y.to(device)
+
+            outputs = model(x)
+            loss = criterion(outputs, y)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        model.eval()
+        test_loss = 0.0
+        error = 0.0
+        test_cnt = 0
+
+        with torch.no_grad():
+            for x, y in dataloader_test:
+                x = x.to(device)
+                y = y.to(device)
+
+                outputs = model(x)
+                loss = criterion(outputs, y)
+
+                test_loss += loss.item()
+
+                outputs = outputs.cpu().numpy()
+                y = y.cpu().numpy()
+                err = np.concatenate(np.abs((outputs - y) / y))
+                error += np.sum(err)
+                test_cnt += len(err)
+
+        print(f'epoch {epoch + 1} test loss: {test_loss / len(dataloader_test)} error: {error * 100 / test_cnt} %')
+        if test_loss < best_loss:
+            best_loss = test_loss
+            print('New best loss obtained. Saving model...')
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'best_loss': best_loss
+            }, checkpoint_file_name)
+
+    test_x = torch.tensor(input_data).to(device).float()
+
+    checkpoint = torch.load(checkpoint_file_name)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    with torch.no_grad():
+        y_expect = model(test_x)
+        y_expect = y_expect.cpu().numpy()
+        y_real = output_data
+
+        error = np.abs((y_expect - y_real) / y_real * 100).flatten()
+        error_max = np.max(error)
+        print(f'Maximum error: {error_max}')
+
+        plt.hist(error, bins=math.ceil(error_max))
+        plt.yscale('log')
+        plt.title(f'Charge expectation from {input_spectrum_num} errors')
+        plt.savefig(f'./data/{filename}_charge_expectation_{input_spectrum_num}.png')
+        plt.show()
+
+
+while True:
+    print("Choose the program.")
+    print("1. expecting next spectrum from central charges and lightest spectrum")
+    print("2. expecting central charges from lightest spectrum")
+    print('-1. exit')
+
+    program = int(input(">>"))
+
+    epoch_num = int(input('Input the number of epochs: ')) if program != -1 else 0
+
+    if program == 1:
+        input_spectrum_num = int(input("Enter the number of input spectrum: "))
+        output_spectrum_num = int(input("Enter the number of output spectrum: "))
+        expect_higher_spectrum(a_charges, c_charges, scis, input_spectrum_num, output_spectrum_num, epoch_num)
+    elif program == 2:
+        input_spectrum_num = int(input("Enter the number of input spectrum: "))
+        expect_ac_charge(a_charges, c_charges, scis, input_spectrum_num, epoch_num)
+    elif program == -1:
+        break
