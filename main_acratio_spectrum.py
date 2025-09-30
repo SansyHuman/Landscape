@@ -69,13 +69,6 @@ def lightest_ac_ratio(field_contents: list[int], a_charges: list[float], c_charg
     plt.savefig(f'data/{filename}_acratio_spectrum.png')
     plt.show()
 
-def __median_sorted(data):
-    n = len(data)
-    if n % 2 == 0:
-        return (data[n // 2 - 1] + data[n // 2]) / 2
-    else:
-        return data[(n - 1) // 2]
-
 
 def save_data(data, data_name: list[str], cluster_obj: KMeans, test_name: str) -> None:
     # save data of clustering
@@ -100,7 +93,7 @@ def save_data(data, data_name: list[str], cluster_obj: KMeans, test_name: str) -
         json_data['clusters'][i]['min'] = [clustered_data[i][k][0] for k in range(n_data)]
         json_data['clusters'][i]['max'] = [clustered_data[i][k][-1] for k in range(n_data)]
         json_data['clusters'][i]['average'] = [np.mean(clustered_data[i][k]) for k in range(n_data)]
-        json_data['clusters'][i]['median'] = [__median_sorted(clustered_data[i][k]) for k in range(n_data)]
+        json_data['clusters'][i]['median'] = [median_sorted(clustered_data[i][k]) for k in range(n_data)]
 
         with open(f'./data/{filename}_{test_name}.json', 'w') as json_file:
             json.dump(json_data, json_file, indent=4)

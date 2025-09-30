@@ -31,6 +31,19 @@ def prime_numbers(n: int) -> list[int]:
     return primes
 
 
+def median_sorted(data):
+    """
+    Gets median from a sorted list.
+    :param data: sorted data
+    :return: median of the data
+    """
+    n = len(data)
+    if n % 2 == 0:
+        return (data[n // 2 - 1] + data[n // 2]) / 2
+    else:
+        return data[(n - 1) // 2]
+
+
 class Monomial:
     """
     A class of monomials.

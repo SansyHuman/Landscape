@@ -1,7 +1,8 @@
 import csv
 import os.path
-from common.utils import prime_numbers
+from common.utils import *
 import math
+import json
 from common.sci_parser import *
 
 import matplotlib.pyplot as plt
@@ -85,6 +86,18 @@ class SpectrumExpectModel(nn.Module):
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 criterion = nn.MSELoss()
+
+def save_data(errors, test_name: str) -> None:
+    json_data = dict()
+    sorted_errors = np.sort(errors, axis=None)
+    json_data['min_error'] = sorted_errors[0]
+    json_data['max_error'] = sorted_errors[-1]
+    json_data['avg_error'] = np.mean(sorted_errors)
+    json_data['median_error'] = median_sorted(sorted_errors)
+    json_data['stdev_error'] = np.std(sorted_errors)
+
+    with open(f'./data/{filename}_{test_name}.json', 'w') as json_file:
+        json.dump(json_data, json_file, indent=4)
 
 
 def expect_higher_spectrum(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], input_spectrum_num: int, output_spectrum_num: int, epoch_num: int) -> None:
@@ -200,12 +213,16 @@ def expect_higher_spectrum(a_charges: list[float], c_charges: list[float], scis:
         error = np.abs((y_expect - y_real) / y_real * 100).flatten()
         error_max = np.max(error)
         print(f'Maximum error: {error_max}')
+        save_data(error, f'{expect_higher_spectrum.__name__}_{input_spectrum_num}_{output_spectrum_num}')
 
         plt.hist(error, bins=math.ceil(error_max))
         plt.yscale('log')
         plt.title(f'Spectrum expectation from {input_spectrum_num} to {output_spectrum_num} errors')
+        plt.xlabel('Error (%)')
+        plt.ylabel('Number of theories')
         plt.savefig(f'./data/{filename}_spectrum_expectation_{input_spectrum_num}_{output_spectrum_num}.png')
         plt.show()
+
 
 def expect_ac_charge(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], input_spectrum_num: int, epoch_num: int) -> None:
     input_data = np.zeros((len(a_charges), input_spectrum_num))
@@ -313,11 +330,249 @@ def expect_ac_charge(a_charges: list[float], c_charges: list[float], scis: list[
         error = np.abs((y_expect - y_real) / y_real * 100).flatten()
         error_max = np.max(error)
         print(f'Maximum error: {error_max}')
+        save_data(error, f'{expect_ac_charge.__name__}_{input_spectrum_num}')
 
         plt.hist(error, bins=math.ceil(error_max))
         plt.yscale('log')
         plt.title(f'Charge expectation from {input_spectrum_num} errors')
+        plt.xlabel('Error (%)')
+        plt.ylabel('Number of theories')
         plt.savefig(f'./data/{filename}_charge_expectation_{input_spectrum_num}.png')
+        plt.show()
+
+
+def expect_ac_ratio(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], input_spectrum_num: int, epoch_num: int) -> None:
+    input_data = np.zeros((len(a_charges), input_spectrum_num))
+    output_data = np.zeros((len(a_charges), 1))
+
+    for i in range(len(a_charges)):
+        sci = scis[i]
+        for j in range(input_spectrum_num):
+            if j >= len(sci.dims):
+                input_data[i, j] = 0
+            else:
+                input_data[i, j] = sci.dims[j]
+
+        output_data[i, 0] = a_charges[i] / c_charges[i]
+
+    input_train = input_data[0::2, :]
+    output_train = output_data[0::2, :]
+    input_test = input_data[1::2, :]
+    output_test = output_data[1::2, :]
+
+    dataset_train = SpectrumExpectDataset(input_train, output_train)
+    print('Train dataset length:', len(dataset_train))
+    dataset_test = SpectrumExpectDataset(input_test, output_test)
+    print('Test dataset length:', len(dataset_test))
+
+    dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True)
+    dataloader_test = DataLoader(dataset_test, batch_size=32, shuffle=True)
+
+    for index, (x, y) in enumerate(dataloader_train):
+        print(f'{index}/{len(dataloader_train)}', end=' ')
+        print('x shape: ', x.shape, end=' ')
+        print('y shape: ', y.shape)
+
+    model = SpectrumExpectModel(input_spectrum_num, 1, input_spectrum_num * 3, input_spectrum_num * 20, input_spectrum_num * 5).to(device)
+    print('A/C ratio expect model shape: ', model(torch.randn(32, input_spectrum_num).to(device)).shape)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    best_loss = 1e10
+
+    checkpoint = None
+    checkpoint_file_name = f'./checkpoint_charge_ratio_expect_{input_spectrum_num}.tar'
+    if os.path.isfile(checkpoint_file_name):
+        print('Checkpoint available. Loads checkpoint...')
+        checkpoint = torch.load(checkpoint_file_name)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        best_loss = checkpoint['best_loss']
+
+    for epoch in range(epoch_num):
+        model.train()
+        for x, y in dataloader_train:
+            x = x.to(device)
+            y = y.to(device)
+
+            outputs = model(x)
+            loss = criterion(outputs, y)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        model.eval()
+        test_loss = 0.0
+        error = 0.0
+        test_cnt = 0
+
+        with torch.no_grad():
+            for x, y in dataloader_test:
+                x = x.to(device)
+                y = y.to(device)
+
+                outputs = model(x)
+                loss = criterion(outputs, y)
+
+                test_loss += loss.item()
+
+                outputs = outputs.cpu().numpy()
+                y = y.cpu().numpy()
+                err = np.concatenate(np.abs((outputs - y) / y))
+                error += np.sum(err)
+                test_cnt += len(err)
+
+        print(f'epoch {epoch + 1} test loss: {test_loss / len(dataloader_test)} error: {error * 100 / test_cnt} %')
+        if test_loss < best_loss:
+            best_loss = test_loss
+            print('New best loss obtained. Saving model...')
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'best_loss': best_loss
+            }, checkpoint_file_name)
+
+    test_x = torch.tensor(input_data).to(device).float()
+
+    checkpoint = torch.load(checkpoint_file_name)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    with torch.no_grad():
+        y_expect = model(test_x)
+        y_expect = y_expect.cpu().numpy()
+        y_real = output_data
+
+        error = np.abs((y_expect - y_real) / y_real * 100).flatten()
+        error_max = np.max(error)
+        print(f'Maximum error: {error_max}')
+        save_data(error, f'{expect_ac_ratio.__name__}_{input_spectrum_num}')
+
+        plt.hist(error, bins=math.ceil(error_max))
+        plt.yscale('log')
+        plt.title(f'Charge ratio expectation from {input_spectrum_num} errors')
+        plt.xlabel('Error (%)')
+        plt.ylabel('Number of theories')
+        plt.savefig(f'./data/{filename}_charge_ratio_expectation_{input_spectrum_num}.png')
+        plt.show()
+
+
+def expect_ac_diff(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], input_spectrum_num: int, epoch_num: int) -> None:
+    input_data = np.zeros((len(a_charges), input_spectrum_num))
+    output_data = np.zeros((len(a_charges), 1))
+
+    for i in range(len(a_charges)):
+        sci = scis[i]
+        for j in range(input_spectrum_num):
+            if j >= len(sci.dims):
+                input_data[i, j] = 0
+            else:
+                input_data[i, j] = sci.dims[j]
+
+        output_data[i, 0] = a_charges[i] - c_charges[i]
+
+    input_train = input_data[0::2, :]
+    output_train = output_data[0::2, :]
+    input_test = input_data[1::2, :]
+    output_test = output_data[1::2, :]
+
+    dataset_train = SpectrumExpectDataset(input_train, output_train)
+    print('Train dataset length:', len(dataset_train))
+    dataset_test = SpectrumExpectDataset(input_test, output_test)
+    print('Test dataset length:', len(dataset_test))
+
+    dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True)
+    dataloader_test = DataLoader(dataset_test, batch_size=32, shuffle=True)
+
+    for index, (x, y) in enumerate(dataloader_train):
+        print(f'{index}/{len(dataloader_train)}', end=' ')
+        print('x shape: ', x.shape, end=' ')
+        print('y shape: ', y.shape)
+
+    model = SpectrumExpectModel(input_spectrum_num, 1, input_spectrum_num * 3, input_spectrum_num * 20, input_spectrum_num * 5).to(device)
+    print('A-C difference expect model shape: ', model(torch.randn(32, input_spectrum_num).to(device)).shape)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    best_loss = 1e10
+
+    checkpoint = None
+    checkpoint_file_name = f'./checkpoint_charge_diff_expect_{input_spectrum_num}.tar'
+    if os.path.isfile(checkpoint_file_name):
+        print('Checkpoint available. Loads checkpoint...')
+        checkpoint = torch.load(checkpoint_file_name)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        best_loss = checkpoint['best_loss']
+
+    for epoch in range(epoch_num):
+        model.train()
+        for x, y in dataloader_train:
+            x = x.to(device)
+            y = y.to(device)
+
+            outputs = model(x)
+            loss = criterion(outputs, y)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        model.eval()
+        test_loss = 0.0
+        error = 0.0
+        test_cnt = 0
+
+        with torch.no_grad():
+            for x, y in dataloader_test:
+                x = x.to(device)
+                y = y.to(device)
+
+                outputs = model(x)
+                loss = criterion(outputs, y)
+
+                test_loss += loss.item()
+
+                outputs = outputs.cpu().numpy()
+                y = y.cpu().numpy()
+                err = np.concatenate(np.abs((outputs - y) / y))
+                error += np.sum(err)
+                test_cnt += len(err)
+
+        print(f'epoch {epoch + 1} test loss: {test_loss / len(dataloader_test)} error: {error * 100 / test_cnt} %')
+        if test_loss < best_loss:
+            best_loss = test_loss
+            print('New best loss obtained. Saving model...')
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'best_loss': best_loss
+            }, checkpoint_file_name)
+
+    test_x = torch.tensor(input_data).to(device).float()
+
+    checkpoint = torch.load(checkpoint_file_name)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    with torch.no_grad():
+        y_expect = model(test_x)
+        y_expect = y_expect.cpu().numpy()
+        y_real = output_data
+
+        error = np.abs((y_expect - y_real) / y_real * 100).flatten()
+        error_max = np.max(error)
+        print(f'Maximum error: {error_max}')
+        save_data(error, f'{expect_ac_diff.__name__}_{input_spectrum_num}')
+
+        error = np.nan_to_num(error, posinf=0.0)
+        error_max = np.max(error)
+
+        plt.hist(error, bins=math.ceil(error_max))
+        plt.yscale('log')
+        plt.title(f'Charge difference expectation from {input_spectrum_num} errors')
+        plt.xlabel('Error (%)')
+        plt.ylabel('Number of theories')
+        plt.savefig(f'./data/{filename}_charge_diff_expectation_{input_spectrum_num}.png')
         plt.show()
 
 
@@ -325,6 +580,8 @@ while True:
     print("Choose the program.")
     print("1. expecting next spectrum from central charges and lightest spectrum")
     print("2. expecting central charges from lightest spectrum")
+    print("3. expecting a/c ratio from lightest spectrum")
+    print("4. expecting a-c difference from lightest spectrum")
     print('-1. exit')
 
     program = int(input(">>"))
@@ -338,5 +595,11 @@ while True:
     elif program == 2:
         input_spectrum_num = int(input("Enter the number of input spectrum: "))
         expect_ac_charge(a_charges, c_charges, scis, input_spectrum_num, epoch_num)
+    elif program == 3:
+        input_spectrum_num = int(input("Enter the number of input spectrum: "))
+        expect_ac_ratio(a_charges, c_charges, scis, input_spectrum_num, epoch_num)
+    elif program == 4:
+        input_spectrum_num = int(input("Enter the number of input spectrum: "))
+        expect_ac_diff(a_charges, c_charges, scis, input_spectrum_num, epoch_num)
     elif program == -1:
         break
