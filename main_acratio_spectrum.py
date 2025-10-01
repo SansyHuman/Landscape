@@ -232,9 +232,9 @@ def kmeans_ac_lightests_matter_contents(field_contents_index: dict[str, int], fi
         p = ax[1].bar(cluster_numbers, num, 0.6, label=content, bottom = bottom)
         bottom += num
         ax[1].bar_label(p, fmt='%.2f', label_type='center')
-    ax[0].set_xlabel('Cluster index')
-    ax[0].set_ylabel('Ratio (%)')
-    ax[0].tick_params(axis='both', rotation='auto')
+    ax[1].set_xlabel('Cluster index')
+    ax[1].set_ylabel('Ratio (%)')
+    ax[1].tick_params(axis='both', rotation='auto')
     ax[1].set_title('matter contents ratio')
     ax[1].legend()
 
