@@ -54,18 +54,6 @@ print(f"Field contents: {field_contents_index}")
 os.makedirs('./data', exist_ok=True)
 
 
-class SpectrumExpectDataset(Dataset):
-    def __init__(self, input_data, output_data):
-        self.x_data = torch.tensor(input_data)
-        self.y_data = torch.tensor(output_data)
-
-    def __getitem__(self, index):
-        return self.x_data[index].float(), self.y_data[index].float()
-
-    def __len__(self):
-        return self.x_data.shape[0]
-
-
 class SpectrumExpectModel(nn.Module):
     def __init__(self, input_dim: int, output_dim: int, *args: int):
         # args: dimension of hidden layers
@@ -127,9 +115,9 @@ def expect_higher_spectrum(a_charges: list[float], c_charges: list[float], scis:
     input_test = input_data[1::2,:]
     output_test = output_data[1::2,:]
 
-    dataset_train = SpectrumExpectDataset(input_train, output_train)
+    dataset_train = GenericDataset(input_train, output_train)
     print('Train dataset length:', len(dataset_train))
-    dataset_test = SpectrumExpectDataset(input_test, output_test)
+    dataset_test = GenericDataset(input_test, output_test)
     print('Test dataset length:', len(dataset_test))
 
     dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True)
@@ -244,9 +232,9 @@ def expect_ac_charge(a_charges: list[float], c_charges: list[float], scis: list[
     input_test = input_data[1::2, :]
     output_test = output_data[1::2, :]
 
-    dataset_train = SpectrumExpectDataset(input_train, output_train)
+    dataset_train = GenericDataset(input_train, output_train)
     print('Train dataset length:', len(dataset_train))
-    dataset_test = SpectrumExpectDataset(input_test, output_test)
+    dataset_test = GenericDataset(input_test, output_test)
     print('Test dataset length:', len(dataset_test))
 
     dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True)
@@ -360,9 +348,9 @@ def expect_ac_ratio(a_charges: list[float], c_charges: list[float], scis: list[S
     input_test = input_data[1::2, :]
     output_test = output_data[1::2, :]
 
-    dataset_train = SpectrumExpectDataset(input_train, output_train)
+    dataset_train = GenericDataset(input_train, output_train)
     print('Train dataset length:', len(dataset_train))
-    dataset_test = SpectrumExpectDataset(input_test, output_test)
+    dataset_test = GenericDataset(input_test, output_test)
     print('Test dataset length:', len(dataset_test))
 
     dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True)
@@ -476,9 +464,9 @@ def expect_ac_diff(a_charges: list[float], c_charges: list[float], scis: list[Su
     input_test = input_data[1::2, :]
     output_test = output_data[1::2, :]
 
-    dataset_train = SpectrumExpectDataset(input_train, output_train)
+    dataset_train = GenericDataset(input_train, output_train)
     print('Train dataset length:', len(dataset_train))
-    dataset_test = SpectrumExpectDataset(input_test, output_test)
+    dataset_test = GenericDataset(input_test, output_test)
     print('Test dataset length:', len(dataset_test))
 
     dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True)
@@ -595,9 +583,9 @@ def expect_ac_abs_diff(a_charges: list[float], c_charges: list[float], scis: lis
     input_test = input_data[1::2, :]
     output_test = output_data[1::2, :]
 
-    dataset_train = SpectrumExpectDataset(input_train, output_train)
+    dataset_train = GenericDataset(input_train, output_train)
     print('Train dataset length:', len(dataset_train))
-    dataset_test = SpectrumExpectDataset(input_test, output_test)
+    dataset_test = GenericDataset(input_test, output_test)
     print('Test dataset length:', len(dataset_test))
 
     dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True)

@@ -13,7 +13,6 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
 
-"""
 filename = input("Enter file name to load: ")
 
 data = None
@@ -55,10 +54,8 @@ for i in range(1, len(data)):
 print(f"Field contents: {field_contents_index}")
 
 os.makedirs('./data', exist_ok=True)
-"""
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 SOS_token = 0
 
 
@@ -167,3 +164,47 @@ def test_epoch(dataloader, encoder, decoder, criterion) -> tuple[float, float]:
             test_cnt += len(err)
 
     return test_loss / len(dataloader), error / test_cnt
+
+
+input_num = int(input("Number of input spectrum: "))
+output_num = int(input("Number of output spectrum: "))
+
+input_data = np.zeros((len(a_charges), input_num, 3)) # [a_i, c_i, dimension_ij]
+output_data = np.zeros((len(a_charges), output_num, 1)) # [dimension_ij]
+
+for i in range(len(a_charges)):
+    a_charge = a_charges[i]
+    c_charge = c_charges[i]
+    sci = scis[i]
+    for j in range(input_num):
+        input_data[i, j, 0] = a_charges[j]
+        input_data[i, j, 1] = c_charges[j]
+        if j >= len(sci.dims):
+            input_data[i, j, 2] = -1 # -1 represents no such operator
+        else:
+            input_data[i, j, 2] = sci.dims[j]
+
+    for j in range(output_num):
+        index = j + input_num
+        if index >= len(sci.dims):
+            output_data[i, j, 0] = -1
+        else:
+            output_data[i, j, 0] = sci.dims[index]
+
+input_train = input_data[0::2,:,:]
+output_train = output_data[0::2,:,:]
+input_test = input_data[1::2,:,:]
+output_test = output_data[1::2,:,:]
+
+dataset_train = GenericDataset(input_train, output_train)
+print('Train dataset length:', len(dataset_train))
+dataset_test = GenericDataset(input_test, output_test)
+print('Test dataset length:', len(dataset_test))
+
+dataloader_train = DataLoader(dataset_train, batch_size=32, shuffle=True)
+dataloader_test = DataLoader(dataset_test, batch_size=32, shuffle=True)
+
+for index, (x, y) in enumerate(dataloader_train):
+    print(f'{index}/{len(dataloader_train)}', end=' ')
+    print('x shape: ', x.shape, end=' ')
+    print('y shape: ', y.shape)

@@ -1,5 +1,7 @@
 import math
 from typing import Union
+from torch.utils.data import Dataset
+import torch
 
 
 def prime_numbers(n: int) -> list[int]:
@@ -274,3 +276,23 @@ def __make_monomials(term: str) -> tuple[float, list[Monomial]]:
             monomials.append(Monomial(indet_expo[0], float(indet_expo[1])))
 
     return coefficient, monomials
+
+
+class GenericDataset(Dataset):
+    """
+    General dataset class.
+    """
+    def __init__(self, input_data, output_data):
+        """
+        Create a new dataset.
+        :param input_data: input data
+        :param output_data: output data
+        """
+        self.x_data = torch.tensor(input_data)
+        self.y_data = torch.tensor(output_data)
+
+    def __getitem__(self, index):
+        return self.x_data[index].float(), self.y_data[index].float()
+
+    def __len__(self):
+        return self.x_data.shape[0]
