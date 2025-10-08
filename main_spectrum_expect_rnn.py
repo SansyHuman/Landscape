@@ -168,6 +168,7 @@ def test_epoch(dataloader, encoder, decoder, criterion) -> tuple[float, float]:
 
 input_num = int(input("Number of input spectrum: "))
 output_num = int(input("Number of output spectrum: "))
+epoch_num = int(input("Number of epochs: "))
 
 input_data = np.zeros((len(a_charges), input_num, 3)) # [a_i, c_i, dimension_ij]
 output_data = np.zeros((len(a_charges), output_num, 1)) # [dimension_ij]
@@ -208,3 +209,44 @@ for index, (x, y) in enumerate(dataloader_train):
     print(f'{index}/{len(dataloader_train)}', end=' ')
     print('x shape: ', x.shape, end=' ')
     print('y shape: ', y.shape)
+
+hidden_size = 3 * 5
+num_layers = 3
+encoder = EncoderRNN(3, hidden_size, num_layers, 'relu').to(device)
+decoder = DecoderRNN(hidden_size, num_layers, 1, output_num, 'relu').to(device)
+
+encoder_outputs, encoder_hidden = encoder(torch.randn(32, input_num, 3).to(device))
+decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden)
+print('Higher spectrum expect model shape: ', decoder_outputs.shape)
+
+encoder_optimizer = torch.optim.Adam(encoder.parameters(), lr=1e-3)
+decoder_optimizer = torch.optim.Adam(decoder.parameters(), lr=1e-3)
+criterion = nn.MSELoss()
+best_loss = 1e10
+
+checkpoint = None
+checkpoint_file_name = f'./checkpoint_spectrum_expect_rnn_{input_num}_{output_num}.tar'
+if os.path.isfile(checkpoint_file_name):
+    print('Checkpoint available. Loads checkpoint...')
+    checkpoint = torch.load(checkpoint_file_name, map_location=device)
+    encoder.load_state_dict(checkpoint['encoder_state_dict'])
+    decoder.load_state_dict(checkpoint['decoder_state_dict'])
+    encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer_state_dict'])
+    decoder_optimizer.load_state_dict(checkpoint['decoder_optimizer_state_dict'])
+    best_loss = checkpoint['best_loss']
+
+for epoch in range(epoch_num):
+    train_epoch(dataloader_train, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion)
+    loss, error = test_epoch(dataloader_test, encoder, decoder, criterion)
+
+    print(f'epoch {epoch + 1} test loss: {loss} error: {error * 100} %')
+    if loss < best_loss:
+        best_loss = loss
+        print('New best loss obtained. Saving model...')
+        torch.save({
+            'encoder_state_dict': encoder.state_dict(),
+            'decoder_state_dict': decoder.state_dict(),
+            'encoder_optimizer_state_dict': encoder_optimizer.state_dict(),
+            'decoder_optimizer_state_dict': decoder_optimizer.state_dict(),
+            'best_loss': best_loss
+        }, checkpoint_file_name)
