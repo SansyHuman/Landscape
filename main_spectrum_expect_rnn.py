@@ -60,28 +60,28 @@ SOS_token = 0
 
 
 class EncoderRNN(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, num_layers: int, nonlinearity: str='tanh'):
+    def __init__(self, input_size: int, hidden_size: int, num_layers: int):
         super(EncoderRNN, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
 
-        self.rnn = nn.RNN(input_size, hidden_size, num_layers, nonlinearity=nonlinearity, batch_first=True)
+        self.rnn = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
 
     def forward(self, input):
-        output, hidden = self.rnn(input)
+        output, (hidden, _) = self.rnn(input)
         return output, hidden
 
 
 class DecoderRNN(nn.Module):
-    def __init__(self, hidden_size: int, num_layers: int, output_size: int, length: int, nonlinearity: str='tanh'):
+    def __init__(self, hidden_size: int, num_layers: int, output_size: int, length: int):
         super(DecoderRNN, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.output_size = output_size
         self.length = length
 
-        self.rnn = nn.RNN(output_size, hidden_size, num_layers, nonlinearity=nonlinearity, batch_first=True)
+        self.rnn = nn.RNN(output_size, hidden_size, num_layers, batch_first=True, nonlinearity='relu')
         self.out = nn.Linear(hidden_size, output_size)
 
     def forward(self, encoder_outputs, encoder_hidden, target_tensor=None):
@@ -102,7 +102,6 @@ class DecoderRNN(nn.Module):
                 decoder_input = decoder_output
 
         decoder_outputs = torch.cat(decoder_outputs, dim=1)
-        decoder_outputs = F.log_softmax(decoder_outputs, dim=-1)
         return decoder_outputs, decoder_hidden, None
 
     def forward_step(self, input, hidden):
@@ -159,6 +158,7 @@ def test_epoch(dataloader, encoder, decoder, criterion) -> tuple[float, float]:
 
             decoder_outputs = decoder_outputs.cpu().numpy()
             target = target.cpu().numpy()
+
             err = np.abs((decoder_outputs - target) / target).flatten()
             error += np.sum(err)
             test_cnt += len(err)
@@ -210,10 +210,10 @@ for index, (x, y) in enumerate(dataloader_train):
     print('x shape: ', x.shape, end=' ')
     print('y shape: ', y.shape)
 
-hidden_size = 3 * 5
-num_layers = 3
-encoder = EncoderRNN(3, hidden_size, num_layers, 'relu').to(device)
-decoder = DecoderRNN(hidden_size, num_layers, 1, output_num, 'relu').to(device)
+hidden_size = 3 * 3
+num_layers = 2
+encoder = EncoderRNN(3, hidden_size, num_layers).to(device)
+decoder = DecoderRNN(hidden_size, num_layers, 1, output_num).to(device)
 
 encoder_outputs, encoder_hidden = encoder(torch.randn(32, input_num, 3).to(device))
 decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden)
