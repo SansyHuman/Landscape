@@ -59,6 +59,24 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 SOS_token = 0
 
 
+class BahdanauAttention(nn.Module):
+    def __init__(self, hidden_size: int):
+        super(BahdanauAttention, self).__init__()
+        self.Wa = nn.Linear(hidden_size, 1)
+        self.Wb = nn.Linear(hidden_size, hidden_size)
+        self.Wc = nn.Linear(hidden_size, hidden_size)
+
+    def forward(self, encoder_hidden, decoder_hidden):
+        score = self.Wa(F.tanh(torch.add(self.Wb(decoder_hidden), self.Wc(encoder_hidden))))
+        score = score.squeeze(2)
+
+        weight = F.softmax(score, dim=-1)
+        weight = weight.unsqueeze(1)
+
+        context = torch.bmm(weight, encoder_hidden)
+        return context
+
+
 class EncoderRNN(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, num_layers: int):
         super(EncoderRNN, self).__init__()
@@ -81,7 +99,8 @@ class DecoderRNN(nn.Module):
         self.output_size = output_size
         self.length = length
 
-        self.rnn = nn.RNN(output_size, hidden_size, num_layers, batch_first=True, nonlinearity='relu')
+        self.attention = BahdanauAttention(hidden_size)
+        self.rnn = nn.RNN(output_size + hidden_size, hidden_size, num_layers, batch_first=True, nonlinearity='relu')
         self.out = nn.Linear(hidden_size, output_size)
 
     def forward(self, encoder_outputs, encoder_hidden, target_tensor=None):
@@ -91,7 +110,7 @@ class DecoderRNN(nn.Module):
         decoder_outputs = []
 
         for i in range(self.length):
-            decoder_output, decoder_hidden = self.forward_step(decoder_input, decoder_hidden)
+            decoder_output, decoder_hidden = self.forward_step(decoder_input, decoder_hidden, encoder_outputs)
             decoder_outputs.append(decoder_output)
 
             if target_tensor is not None:
@@ -104,9 +123,14 @@ class DecoderRNN(nn.Module):
         decoder_outputs = torch.cat(decoder_outputs, dim=1)
         return decoder_outputs, decoder_hidden, None
 
-    def forward_step(self, input, hidden):
-        output, hidden = self.rnn(input, hidden)
+    def forward_step(self, input, hidden, encoder_outputs):
+        decoder_hidden = hidden[-1,:,:].unsqueeze(0).permute(1,0,2)
+        context = self.attention(encoder_outputs, decoder_hidden)
+
+        input_rnn = torch.cat((input, context), dim=2)
+        output, hidden = self.rnn(input_rnn, hidden)
         output = self.out(output)
+
         return output, hidden
 
 
@@ -210,8 +234,8 @@ for index, (x, y) in enumerate(dataloader_train):
     print('x shape: ', x.shape, end=' ')
     print('y shape: ', y.shape)
 
-hidden_size = 3 * 3
-num_layers = 2
+hidden_size = 3 * 6
+num_layers = 4
 encoder = EncoderRNN(3, hidden_size, num_layers).to(device)
 decoder = DecoderRNN(hidden_size, num_layers, 1, output_num).to(device)
 
@@ -219,8 +243,8 @@ encoder_outputs, encoder_hidden = encoder(torch.randn(32, input_num, 3).to(devic
 decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden)
 print('Higher spectrum expect model shape: ', decoder_outputs.shape)
 
-encoder_optimizer = torch.optim.Adam(encoder.parameters(), lr=1e-3)
-decoder_optimizer = torch.optim.Adam(decoder.parameters(), lr=1e-3)
+encoder_optimizer = torch.optim.RMSprop(encoder.parameters(), lr=1e-3)
+decoder_optimizer = torch.optim.RMSprop(decoder.parameters(), lr=1e-3)
 criterion = nn.MSELoss()
 best_loss = 1e10
 
