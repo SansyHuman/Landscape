@@ -274,3 +274,46 @@ for epoch in range(epoch_num):
             'decoder_optimizer_state_dict': decoder_optimizer.state_dict(),
             'best_loss': best_loss
         }, checkpoint_file_name)
+
+test_input = torch.tensor(input_data).to(device).float()
+
+checkpoint = torch.load(checkpoint_file_name, map_location=device)
+encoder.load_state_dict(checkpoint['encoder_state_dict'])
+decoder.load_state_dict(checkpoint['decoder_state_dict'])
+encoder_optimizer.load_state_dict(checkpoint['encoder_optimizer_state_dict'])
+decoder_optimizer.load_state_dict(checkpoint['decoder_optimizer_state_dict'])
+
+encoder.eval()
+decoder.eval()
+
+with torch.no_grad():
+    encoder_outputs, encoder_hidden = encoder(test_input)
+    output_expect, _, _ = decoder(encoder_outputs, encoder_hidden)
+    output_expect = output_expect.cpu().numpy()
+    output_real = output_data
+
+    error = np.abs((output_expect - output_real) / output_real * 100).flatten()
+    error_max = np.max(error)
+    print(f'Maximum error: {error_max}')
+
+    json_data = dict()
+    sorted_errors = np.sort(error, axis=None)
+    json_data['min_error'] = sorted_errors[0]
+    json_data['max_error'] = sorted_errors[-1]
+    json_data['avg_error'] = np.mean(sorted_errors)
+    json_data['median_error'] = median_sorted(sorted_errors)
+    json_data['stdev_error'] = np.std(sorted_errors)
+
+    with open(f'./data/{filename}_spectrum_expect_rnn_{input_num}_{output_num}.json', 'w') as json_file:
+        json.dump(json_data, json_file, indent=4)
+
+    error = np.nan_to_num(error, posinf=0.0)
+    error_max = np.max(error)
+
+    plt.hist(error, bins=math.ceil(error_max))
+    plt.yscale('log')
+    plt.title(f'Spectrum expectation using RNN from {input_num} to {output_num}')
+    plt.xlabel('Error (%)')
+    plt.ylabel('Number of theories')
+    plt.savefig(f'./data/{filename}_spectrum_expect_rnn_{input_num}_{output_num}.png')
+    plt.show()
