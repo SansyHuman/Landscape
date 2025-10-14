@@ -54,22 +54,14 @@ print(f"Field contents: {field_contents_index}")
 os.makedirs('./data', exist_ok=True)
 
 
-class SpectrumExpectModel(nn.Module):
+class SpectrumExpectModel(FullyConnectedNetwork):
     def __init__(self, input_dim: int, output_dim: int, *args: int):
         # args: dimension of hidden layers
-        super().__init__()
-        dims = [input_dim] + list(args) + [output_dim]
-        self.layers = nn.Sequential()
-        for i in range(len(dims) - 3):
-            self.layers.append(nn.Linear(dims[i], dims[i + 1]))
-            self.layers.append(nn.ELU())
-        self.layers.append(nn.Linear(dims[-3], dims[-2]))
-        self.layers.append(nn.ReLU())
-        self.layers.append(nn.Linear(dims[-2], dims[-1]))
-
-    def forward(self, x):
-        x = self.layers(x)
-        return x
+        super().__init__(
+            input_dim,
+            output_dim,
+            *([(args[i], nn.ELU()) for i in range(len(args) - 1)] + [(args[-1], nn.ReLU())])
+        )
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

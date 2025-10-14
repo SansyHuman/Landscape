@@ -1,5 +1,7 @@
 import math
 from typing import Union
+
+from torch import nn
 from torch.utils.data import Dataset
 import torch
 
@@ -296,3 +298,28 @@ class GenericDataset(Dataset):
 
     def __len__(self):
         return self.x_data.shape[0]
+
+
+class FullyConnectedNetwork(nn.Module):
+    """
+    General fully connected network class.
+    """
+    def __init__(self, input_size: int, output_size: int, *args: tuple[int, nn.Module]):
+        """
+        Create a new fully connected network.
+        :param input_size: dimension of input vector
+        :param output_size: dimension of output vector
+        :param args: tuple of dimensions of hidden layers and activation function
+        """
+        super(FullyConnectedNetwork, self).__init__()
+        dims = [input_size] + [args[i][0] for i in range(len(args))] + [output_size]
+        self.layers = nn.Sequential()
+
+        for i in range(len(dims) - 2):
+            self.layers.append(nn.Linear(dims[i], dims[i + 1]))
+            self.layers.append(args[i][1])
+        self.layers.append(nn.Linear(dims[-2], dims[-1]))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.layers(x)
+        return x
