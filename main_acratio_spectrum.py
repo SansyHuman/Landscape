@@ -1,4 +1,5 @@
 import csv
+import sys
 import os.path
 import math
 import json
@@ -6,7 +7,9 @@ from common.sci_parser import *
 
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, BisectingKMeans
+
+csv.field_size_limit(sys.maxsize)
 
 filename = input("Enter file name to load: ")
 
@@ -185,9 +188,8 @@ def kmeans_ac_lightests_matter_contents(field_contents_index: dict[str, int], fi
                           (scis[i].relevant_dims[1] if len(scis[i].relevant_dims) > 1 else 0)] for i in
                          range(len(scis))])
 
-    kmeans = KMeans(n_clusters=clusters)
+    kmeans = BisectingKMeans(n_clusters=clusters)
     kmeans.fit(two_dims)
-    print(f'Iteration number: {kmeans.n_iter_}')
     print(f'Cluster centers: {kmeans.cluster_centers_}')
 
     cluster_numbers = [i + 1 for i in range(clusters)]
@@ -288,6 +290,47 @@ def kmeans_ac_lightest_num(a_charges: list[float], c_charges: list[float], scis:
     plt.show()
 
 
+def kmeans_ac_lightests(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], num_lightests: int, clusters: int) -> None:
+    # simple kmeans with a, c central charges and dimensions of arbitrary number of lightest operators
+    dims = np.array([[a_charges[i], c_charges[i]] + [scis[i].dims[j] if j < len(scis[i].dims) else 0 for j in range(num_lightests)] for i in range(len(a_charges))])
+
+    kmeans = KMeans(n_clusters=clusters)
+    kmeans.fit(dims)
+    print(f'Iteration number: {kmeans.n_iter_}')
+    print(f'Cluster centers: {kmeans.cluster_centers_}')
+
+    plt.style.use('default')
+    plt.rcParams['figure.figsize'] = (16, 12)
+    plt.rcParams['font.size'] = 15
+
+    fig, ax = plt.subplots(1, 2, squeeze=True)
+    ax[0].scatter(a_charges, c_charges, s=1, c=kmeans.labels_)
+    ax[0].scatter(kmeans.cluster_centers_[:, 0],
+                  kmeans.cluster_centers_[:, 1],
+                  c='b', marker='x', linewidths=2)
+    ax[0].set_xlabel('a')
+    ax[0].set_ylabel('c')
+    ax[0].tick_params(axis='both', rotation='auto')
+    ax[0].set_title('a-c space')
+
+    ax[1].scatter(dims[:, 2], dims[:, 3], s=1, c=kmeans.labels_)
+    ax[1].scatter(kmeans.cluster_centers_[:, 2],
+                  kmeans.cluster_centers_[:, 3],
+                  c='b', marker='x', linewidths=2)
+    ax[1].set_xlabel('lightest dim')
+    ax[1].set_ylabel('second lightest dim')
+    ax[1].tick_params(axis='both', rotation='auto')
+    ax[1].set_title('dimension space')
+
+    fig.suptitle(f'KMeans cluster by ac charge and dimension of {num_lightests} lightest operator')
+
+    save_data(dims, ['a_charge', 'c_charge'] + [f'dimension_{i + 1}' for i in range(num_lightests)], kmeans,
+              test_name=kmeans_ac_lightests.__name__ + f'_{num_lightests}')
+    plt.savefig(f'./data/{filename}_{kmeans_ac_lightests.__name__}_{num_lightests}.png')
+
+    plt.show()
+
+
 while True:
     print("Choose the program.")
     print("1. simple plot of a/c and smallest dimension")
@@ -295,6 +338,7 @@ while True:
     print("3. simple kmeans with a, c central charges and smallest and second smallest dimension")
     print("4. simple kmeans with a, c central charges and smallest and second smallest dimension and check matter contents ratio")
     print("5. simple kmeans with a, c central charges and dimension and number of lighetst operators")
+    print("6. simple kmeans with a, c central charges and dimension of arbitrary number of lightest operators")
     print('-1. exit')
 
     program = int(input(">>"))
@@ -313,5 +357,9 @@ while True:
         kmeans_ac_lightests_matter_contents(field_contents_index, field_contents, a_charges, c_charges, scis)
     elif program == 5:
         kmeans_ac_lightest_num(a_charges, c_charges, scis, n_clusters)
+    elif program == 6:
+        print("Input the number of lightest operators.")
+        num_lightests = int(input(">>"))
+        kmeans_ac_lightests(a_charges, c_charges, scis, num_lightests, n_clusters)
     elif program == -1:
         break
