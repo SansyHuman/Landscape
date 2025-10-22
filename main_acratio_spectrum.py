@@ -3,6 +3,9 @@ import sys
 import os.path
 import math
 import json
+
+from matplotlib.widgets import Slider
+
 from common.sci_parser import *
 
 import matplotlib.pyplot as plt
@@ -304,6 +307,8 @@ def kmeans_ac_lightests(a_charges: list[float], c_charges: list[float], scis: li
     plt.rcParams['font.size'] = 15
 
     fig, ax = plt.subplots(1, 2, squeeze=True)
+    fig.subplots_adjust(left=0.05, bottom=0.25)
+
     ax[0].scatter(a_charges, c_charges, s=1, c=kmeans.labels_)
     ax[0].scatter(kmeans.cluster_centers_[:, 0],
                   kmeans.cluster_centers_[:, 1],
@@ -313,14 +318,34 @@ def kmeans_ac_lightests(a_charges: list[float], c_charges: list[float], scis: li
     ax[0].tick_params(axis='both', rotation='auto')
     ax[0].set_title('a-c space')
 
-    ax[1].scatter(dims[:, 2], dims[:, 3], s=1, c=kmeans.labels_)
-    ax[1].scatter(kmeans.cluster_centers_[:, 2],
+    sc_data = ax[1].scatter(dims[:, 2], dims[:, 3], s=1, c=kmeans.labels_)
+    sc_center = ax[1].scatter(kmeans.cluster_centers_[:, 2],
                   kmeans.cluster_centers_[:, 3],
                   c='b', marker='x', linewidths=2)
-    ax[1].set_xlabel('lightest dim')
-    ax[1].set_ylabel('second lightest dim')
+    ax[1].set_xlabel('dim 1')
+    ax[1].set_ylabel('dim 2')
     ax[1].tick_params(axis='both', rotation='auto')
     ax[1].set_title('dimension space')
+
+    axcolor = 'lightgoldenrodyellow'
+    axx = fig.add_axes((0.6, 0.1, 0.3, 0.03), facecolor=axcolor)
+    axy = fig.add_axes((0.6, 0.15, 0.3, 0.03), facecolor=axcolor)
+
+    sx = Slider(axx, 'dimension 1', 1, num_lightests, valinit=1, valstep=1)
+    sy = Slider(axy, 'dimension 2', 1, num_lightests, valinit=2, valstep=1)
+
+    def update(val):
+        dim1 = round(sx.val)
+        dim2 = round(sy.val)
+        sc_data.set_offsets(np.column_stack((dims[:, 1 + dim1], dims[:, 1 + dim2])))
+        sc_center.set_offsets(np.column_stack((kmeans.cluster_centers_[:, 1 + dim1],
+                  kmeans.cluster_centers_[:, 1 + dim2])))
+        ax[1].set_xlabel(f'dim {dim1}')
+        ax[1].set_ylabel(f'dim {dim2}')
+        fig.canvas.draw_idle()
+
+    sx.on_changed(update)
+    sy.on_changed(update)
 
     fig.suptitle(f'KMeans cluster by ac charge and dimension of {num_lightests} lightest operator')
 
@@ -414,6 +439,8 @@ def kmeans_ac_lightests_diff(a_charges: list[float], c_charges: list[float], sci
     plt.rcParams['text.usetex'] = True
 
     fig, ax = plt.subplots(1, 2, squeeze=True)
+    fig.subplots_adjust(left=0.05, bottom=0.25)
+
     ax[0].scatter(a_charges, c_charges, s=1, c=kmeans.labels_)
     ax[0].scatter(kmeans.cluster_centers_[:, 0],
                   kmeans.cluster_centers_[:, 1],
@@ -423,14 +450,34 @@ def kmeans_ac_lightests_diff(a_charges: list[float], c_charges: list[float], sci
     ax[0].tick_params(axis='both', rotation='auto')
     ax[0].set_title('a-c space')
 
-    ax[1].scatter(dims[:, 2], dims[:, 3], s=1, c=kmeans.labels_)
-    ax[1].scatter(kmeans.cluster_centers_[:, 2],
-                  kmeans.cluster_centers_[:, 3],
-                  c='b', marker='x', linewidths=2)
+    sc_data = ax[1].scatter(dims[:, 2], dims[:, 3], s=1, c=kmeans.labels_)
+    sc_center = ax[1].scatter(kmeans.cluster_centers_[:, 2],
+                              kmeans.cluster_centers_[:, 3],
+                              c='b', marker='x', linewidths=2)
     ax[1].set_xlabel(r'$\delta\Delta_{12}$')
     ax[1].set_ylabel(r'$\delta\Delta_{23}$')
     ax[1].tick_params(axis='both', rotation='auto')
     ax[1].set_title('dimension space')
+
+    axcolor = 'lightgoldenrodyellow'
+    axx = fig.add_axes((0.6, 0.1, 0.3, 0.03), facecolor=axcolor)
+    axy = fig.add_axes((0.6, 0.15, 0.3, 0.03), facecolor=axcolor)
+
+    sx = Slider(axx, 'delta 1', 1, num_lightests - 1, valinit=1, valstep=1)
+    sy = Slider(axy, 'delta 2', 1, num_lightests - 1, valinit=2, valstep=1)
+
+    def update(val):
+        dim1 = round(sx.val)
+        dim2 = round(sy.val)
+        sc_data.set_offsets(np.column_stack((dims[:, 1 + dim1], dims[:, 1 + dim2])))
+        sc_center.set_offsets(np.column_stack((kmeans.cluster_centers_[:, 1 + dim1],
+                                               kmeans.cluster_centers_[:, 1 + dim2])))
+        ax[1].set_xlabel(r'$\delta\Delta_' + '{' f'{dim1}{dim1 + 1}' + '}$')
+        ax[1].set_ylabel(r'$\delta\Delta_' + '{' f'{dim2}{dim2 + 1}' + '}$')
+        fig.canvas.draw_idle()
+
+    sx.on_changed(update)
+    sy.on_changed(update)
 
     fig.suptitle(f'KMeans cluster by ac charge and dimension differences of {num_lightests} lightest operator')
 
@@ -529,7 +576,7 @@ while True:
         n_clusters = int(input(">>"))
 
     num_lightests = 0
-    if program > 6:
+    if program > 5:
         print("Input the number of lightest operators.")
         num_lightests = int(input(">>"))
 
