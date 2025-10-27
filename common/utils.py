@@ -1,9 +1,13 @@
 import math
+import json
+import os
 from typing import Union
 
+from sklearn.cluster import KMeans, BisectingKMeans
 from torch import nn
 from torch.utils.data import Dataset
 import torch
+import numpy as np
 
 
 def prime_numbers(n: int) -> list[int]:
@@ -323,3 +327,58 @@ class FullyConnectedNetwork(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.layers(x)
         return x
+
+
+def save_cluster_data(data, data_name: list[str], cluster_obj: Union[KMeans, BisectingKMeans], file_name: str, test_name: str, path: str) -> None:
+    """
+    Save data of clustering
+    :param data: data used for clustering
+    :param data_name: names of data
+    :param cluster_obj: KMeans or BisectingKMeans object
+    :param file_name: name of the data file
+    :param test_name: name of the test
+    :param path: path to save data
+    """
+    os.makedirs(path, exist_ok=True)
+
+    n_clusters = cluster_obj.n_clusters
+    n_data = len(data_name)
+    clustered_data = [[[] for _ in range(n_data)] for _ in range(n_clusters)]
+
+    for i in range(len(data)):
+        cluster = cluster_obj.labels_[i]
+        for j in range(n_data):
+            clustered_data[cluster][j].append(data[i][j])
+
+    json_data = dict()
+    json_data['data_name'] = data_name
+    json_data['clusters'] = [dict() for _ in range(n_clusters)]
+
+    for i in range(n_clusters):
+        json_data['clusters'][i]['num_data'] = len(clustered_data[i][0])
+        json_data['clusters'][i]['center'] = list(cluster_obj.cluster_centers_[i])
+        for j in range(n_data):
+            clustered_data[i][j].sort()
+        json_data['clusters'][i]['min'] = [clustered_data[i][k][0] for k in range(n_data)]
+        json_data['clusters'][i]['max'] = [clustered_data[i][k][-1] for k in range(n_data)]
+        json_data['clusters'][i]['average'] = [np.mean(clustered_data[i][k]) for k in range(n_data)]
+        json_data['clusters'][i]['median'] = [median_sorted(clustered_data[i][k]) for k in range(n_data)]
+
+    with open(f'{path}/{file_name}_{test_name}.json', 'w') as json_file:
+        json.dump(json_data, json_file, indent=4)
+
+    data_list = ['center', 'min', 'max', 'average', 'median']
+    with open(f'{path}/{file_name}_{test_name}.csv', 'w') as csv_file:
+        for data_kind in data_list:
+            csv_file.write(f'{data_kind}, ')
+            for i in range(n_data):
+                csv_file.write(f'{data_name[i]}, ')
+            csv_file.write('\n')
+
+            for i in range(n_clusters):
+                csv_file.write(f'{i}, ')
+                for j in range(n_data):
+                    csv_file.write(f'{json_data['clusters'][i][data_kind][j]}, ')
+                csv_file.write('\n')
+
+            csv_file.write('\n')

@@ -3,6 +3,7 @@ import sys
 import os.path
 import math
 import json
+import pathlib
 
 from matplotlib.widgets import Slider
 
@@ -11,9 +12,13 @@ from common.sci_parser import *
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.cluster import KMeans, BisectingKMeans
+import matplotlib as mpl
 
+mpl.rcParams.update(mpl.rcParamsDefault)
+plt.rcParams['text.usetex'] = True
+
+datapath = str(pathlib.Path().resolve()) + '/data'
 csv.field_size_limit(np.iinfo(np.int32).max)
-
 filename = input("Enter file name to load: ")
 
 data = None
@@ -76,35 +81,6 @@ def lightest_ac_ratio(field_contents: list[int], a_charges: list[float], c_charg
     plt.show()
 
 
-def save_data(data, data_name: list[str], cluster_obj: KMeans, test_name: str) -> None:
-    # save data of clustering
-    n_clusters = cluster_obj.n_clusters
-    n_data = len(data_name)
-    clustered_data = [[[] for _ in range(n_data)] for _ in range(n_clusters)]
-
-    for i in range(len(data)):
-        cluster = cluster_obj.labels_[i]
-        for j in range(n_data):
-            clustered_data[cluster][j].append(data[i][j])
-
-    json_data = dict()
-    json_data['data_name'] = data_name
-    json_data['clusters'] = [dict() for _ in range(n_clusters)]
-
-    for i in range(n_clusters):
-        json_data['clusters'][i]['num_data'] = len(clustered_data[i][0])
-        json_data['clusters'][i]['center'] = list(cluster_obj.cluster_centers_[i])
-        for j in range(n_data):
-            clustered_data[i][j].sort()
-        json_data['clusters'][i]['min'] = [clustered_data[i][k][0] for k in range(n_data)]
-        json_data['clusters'][i]['max'] = [clustered_data[i][k][-1] for k in range(n_data)]
-        json_data['clusters'][i]['average'] = [np.mean(clustered_data[i][k]) for k in range(n_data)]
-        json_data['clusters'][i]['median'] = [median_sorted(clustered_data[i][k]) for k in range(n_data)]
-
-        with open(f'./data/{filename}_{test_name}.json', 'w') as json_file:
-            json.dump(json_data, json_file, indent=4)
-
-
 def kmeans_second_lightest(a_charges: list[float], c_charges: list[float], scis: list[SuperConformalIndex], clusters: int) -> None:
     # simple kmeans with smallest and second smallest dimension
     two_dims = np.array([[sci.smallest_dim, (sci.relevant_dims[1] if len(sci.relevant_dims) > 1 else 0)] for sci in scis])
@@ -136,7 +112,7 @@ def kmeans_second_lightest(a_charges: list[float], c_charges: list[float], scis:
 
     fig.suptitle('KMeans cluster by first two smallest dimensions')
 
-    save_data(two_dims,['smallest_dim', 'second_smallest_dim'], kmeans, test_name=kmeans_second_lightest.__name__)
+    save_cluster_data(two_dims,['smallest_dim', 'second_smallest_dim'], kmeans, file_name=filename, test_name=kmeans_second_lightest.__name__, path=datapath)
     plt.savefig(f'./data/{filename}_{kmeans_second_lightest.__name__}.png')
 
     plt.show()
@@ -176,7 +152,7 @@ def kmeans_ac_second_lightest(a_charges: list[float], c_charges: list[float], sc
 
     fig.suptitle('KMeans cluster by ac charge and first two smallest dimensions')
 
-    save_data(two_dims, ['a_charge', 'c_charge', 'smallest_dim', 'second_smallest_dim'], kmeans, test_name=kmeans_ac_second_lightest.__name__)
+    save_cluster_data(two_dims, ['a_charge', 'c_charge', 'smallest_dim', 'second_smallest_dim'], kmeans, file_name=filename, test_name=kmeans_ac_second_lightest.__name__, path=datapath)
     plt.savefig(f'./data/{filename}_{kmeans_ac_second_lightest.__name__}.png')
 
     plt.show()
@@ -245,8 +221,8 @@ def kmeans_ac_second_lightests_matter_contents(field_contents_index: dict[str, i
 
     fig.suptitle('KMeans cluster by ac charge and first two smallest dimensions')
 
-    save_data(two_dims, ['a_charge', 'c_charge', 'smallest_dim', 'second_smallest_dim'], kmeans,
-              test_name=kmeans_ac_second_lightests_matter_contents.__name__)
+    save_cluster_data(two_dims, ['a_charge', 'c_charge', 'smallest_dim', 'second_smallest_dim'], kmeans,
+              file_name=filename, test_name=kmeans_ac_second_lightests_matter_contents.__name__, path=datapath)
     plt.savefig(f'./data/{filename}_{kmeans_ac_second_lightests_matter_contents.__name__}.png')
 
     plt.show()
@@ -286,8 +262,8 @@ def kmeans_ac_lightest_num(a_charges: list[float], c_charges: list[float], scis:
 
     fig.suptitle('KMeans cluster by ac charge and dimension and the number of lightest operator')
 
-    save_data(two_dims, ['a_charge', 'c_charge', 'smallest_dim', 'num_smallest_dim'], kmeans,
-              test_name=kmeans_ac_lightest_num.__name__)
+    save_cluster_data(two_dims, ['a_charge', 'c_charge', 'smallest_dim', 'num_smallest_dim'], kmeans,
+              file_name=filename, test_name=kmeans_ac_lightest_num.__name__, path=datapath)
     plt.savefig(f'./data/{filename}_{kmeans_ac_lightest_num.__name__}.png')
 
     plt.show()
@@ -349,8 +325,8 @@ def kmeans_ac_lightests(a_charges: list[float], c_charges: list[float], scis: li
 
     fig.suptitle(f'KMeans cluster by ac charge and dimension of {num_lightests} lightest operator')
 
-    save_data(dims, ['a_charge', 'c_charge'] + [f'dimension_{i + 1}' for i in range(num_lightests)], kmeans,
-              test_name=kmeans_ac_lightests.__name__ + f'_{num_lightests}')
+    save_cluster_data(dims, ['a_charge', 'c_charge'] + [f'dimension_{i + 1}' for i in range(num_lightests)], kmeans,
+              file_name=filename, test_name=kmeans_ac_lightests.__name__ + f'_{num_lightests}', path=datapath)
     plt.savefig(f'./data/{filename}_{kmeans_ac_lightests.__name__}_{num_lightests}.png')
 
     plt.show()
@@ -417,8 +393,8 @@ def kmeans_ac_lightests_matter_contents(field_contents_index: dict[str, int], fi
 
     fig.suptitle(f'KMeans cluster by ac charge and first {num_lightests} smallest dimensions')
 
-    save_data(dims, ['a_charge', 'c_charge'] + [f'dimension_{i + 1}' for i in range(num_lightests)], kmeans,
-              test_name=kmeans_ac_lightests_matter_contents.__name__ + f'_{num_lightests}')
+    save_cluster_data(dims, ['a_charge', 'c_charge'] + [f'dimension_{i + 1}' for i in range(num_lightests)], kmeans,
+              file_name=filename, test_name=kmeans_ac_lightests_matter_contents.__name__ + f'_{num_lightests}', path=datapath)
     plt.savefig(f'./data/{filename}_{kmeans_ac_lightests_matter_contents.__name__}_{num_lightests}.png')
 
     plt.show()
@@ -436,7 +412,6 @@ def kmeans_ac_lightests_diff(a_charges: list[float], c_charges: list[float], sci
     plt.style.use('default')
     plt.rcParams['figure.figsize'] = (16, 12)
     plt.rcParams['font.size'] = 15
-    plt.rcParams['text.usetex'] = True
 
     fig, ax = plt.subplots(1, 2, squeeze=True)
     fig.subplots_adjust(left=0.05, bottom=0.25)
@@ -481,8 +456,8 @@ def kmeans_ac_lightests_diff(a_charges: list[float], c_charges: list[float], sci
 
     fig.suptitle(f'KMeans cluster by ac charge and dimension differences of {num_lightests} lightest operator')
 
-    save_data(dims, ['a_charge', 'c_charge'] + [f'delta_dim_{i}_{i + 1}' for i in range(num_lightests - 1)], kmeans,
-              test_name=kmeans_ac_lightests_diff.__name__ + f'_{num_lightests}')
+    save_cluster_data(dims, ['a_charge', 'c_charge'] + [f'delta_dim_{i}_{i + 1}' for i in range(num_lightests - 1)], kmeans,
+            file_name=filename, test_name=kmeans_ac_lightests_diff.__name__ + f'_{num_lightests}', path=datapath)
     plt.savefig(f'./data/{filename}_{kmeans_ac_lightests_diff.__name__}_{num_lightests}.png')
 
     plt.show()
@@ -549,8 +524,8 @@ def kmeans_ac_lightests_diff_matter_contents(field_contents_index: dict[str, int
 
     fig.suptitle(f'KMeans cluster by ac charge and differences of first {num_lightests} smallest dimensions')
 
-    save_data(dims, ['a_charge', 'c_charge'] + [f'delta_dim_{i}_{i + 1}' for i in range(num_lightests - 1)], kmeans,
-              test_name=kmeans_ac_lightests_diff_matter_contents.__name__ + f'_{num_lightests}')
+    save_cluster_data(dims, ['a_charge', 'c_charge'] + [f'delta_dim_{i}_{i + 1}' for i in range(num_lightests - 1)], kmeans,
+              file_name=filename, test_name=kmeans_ac_lightests_diff_matter_contents.__name__ + f'_{num_lightests}', path=datapath)
     plt.savefig(f'./data/{filename}_{kmeans_ac_lightests_diff_matter_contents.__name__}_{num_lightests}.png')
 
     plt.show()
