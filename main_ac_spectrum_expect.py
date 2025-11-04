@@ -11,6 +11,8 @@ import torch.nn as nn
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
+csv.field_size_limit(np.iinfo(np.int32).max)
+
 filename = input("Enter file name to load: ")
 
 data = None
