@@ -355,7 +355,16 @@ def expect_ac_ratio(a_charges: list[float], c_charges: list[float], scis: list[S
         print('x shape: ', x.shape, end=' ')
         print('y shape: ', y.shape)
 
-    model = SpectrumExpectModel(input_spectrum_num, 1, input_spectrum_num * 3, input_spectrum_num * 20, input_spectrum_num * 5).to(device)
+    model = SpectrumExpectModel(input_spectrum_num, 1,
+                                input_spectrum_num * 10,
+                                input_spectrum_num * 20,
+                                input_spectrum_num * 30,
+                                input_spectrum_num * 30,
+                                input_spectrum_num * 15,
+                                input_spectrum_num * 15,
+                                input_spectrum_num * 5,
+                                input_spectrum_num * 2
+                                ).to(device)
     print('A/C ratio expect model shape: ', model(torch.randn(32, input_spectrum_num).to(device)).shape)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)

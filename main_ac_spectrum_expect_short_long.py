@@ -218,4 +218,6 @@ def expect_ac_ratio_short_long(w_lengths: list[int], a_charges: list[float], c_c
         plt.savefig(f'./data/{filename}_charge_ratio_expectation_short_long_{input_spectrum_num}.png')
         plt.show()
 
-expect_ac_ratio_short_long(w_lengths, a_charges, c_charges, scis, 6, 1000)
+epoch_num = int(input('Input the number of epochs: '))
+
+expect_ac_ratio_short_long(w_lengths, a_charges, c_charges, scis, 6, epoch_num)
