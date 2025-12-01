@@ -70,12 +70,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 criterion = nn.MSELoss()
 
 input_spectrum_num = int(input('Enter the number of input spectrum: '))
-epoch_num = int(input('Enter the number of epochs: '))
+epoch_num = int(input('Enter the number of steps of epochs. For one step, 100 epochs proceed and check the error: '))
 ratio_num = int(input('Enter the number of ratio of training set, starting from 1/2 multiplied repeatedly by 1/2: '))
 
 data_num = len(a_charges)
 input_data = np.zeros((data_num, input_spectrum_num))
 output_data = np.zeros((data_num, 1))
+errors = np.zeros((ratio_num, epoch_num))
 
 for i in range(data_num):
     sci = scis[i]
@@ -87,9 +88,11 @@ for i in range(data_num):
 
     output_data[i, 0] = a_charges[i] / c_charges[i]
 
+"""
 checkpoint_file_names = [None] * ratio_num
 models = [None] * ratio_num
 optimizers = [None] * ratio_num
+"""
 
 inverse_train_ratio = 1
 
@@ -149,7 +152,7 @@ for i in range(ratio_num):
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         best_loss = checkpoint['best_loss']
 
-    for epoch in range(epoch_num):
+    for epoch in range(epoch_num * 100):
         model.train()
         for x, y in dataloader_train:
             x = x.to(device)
@@ -193,10 +196,47 @@ for i in range(ratio_num):
                 'best_loss': best_loss
             }, checkpoint_file_name)
 
+        if (epoch + 1) % 100 == 0:
+            print(f'Calculating error train set ratio 1/{inverse_train_ratio} at epoch {epoch + 1}...')
+
+            checkpoint = torch.load(checkpoint_file_name, map_location=device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+            with torch.no_grad():
+                test_x = torch.tensor(input_data).to(device).float()
+                y_real = output_data
+                y_expect = model(test_x)
+                y_expect = y_expect.cpu().numpy()
+
+                error = np.abs((y_expect - y_real) / y_real * 100).flatten()
+                error_avg = np.mean(error)
+                errors[i][(epoch + 1) // 100 - 1] = error_avg
+
+    """
     checkpoint_file_names[i] = checkpoint_file_name
     models[i] = model
     optimizers[i] = optimizer
+    """
 
+plt.style.use('default')
+plt.rcParams['figure.figsize'] = (16, 12)
+plt.rcParams['font.size'] = 15
+
+fig, ax = plt.subplots()
+fig.suptitle('Train set ratio - error')
+
+x = [100 * (i + 1) for i in range(epoch_num)]
+for i in range(ratio_num):
+    ax.plot(x, errors[i], label=f'1/{2**(i + 1)}')
+ax.set_xlabel('Epoch')
+ax.set_ylabel('Error (%)')
+ax.legend()
+
+plt.savefig(f'./data/{filename}_charge_expectation_ratio_{input_spectrum_num}_{ratio_num}.png')
+plt.show()
+
+"""
 print('Calculating errors of each train set ratio...')
 
 errors = [0.0] * ratio_num
@@ -233,3 +273,4 @@ ax.set_ylabel('Error (%)')
 
 plt.savefig(f'./data/{filename}_charge_expectation_ratio_{input_spectrum_num}_{ratio_num}.png')
 plt.show()
+"""
