@@ -199,6 +199,45 @@ def is_number(n: str) -> bool:
         return False
 
 
+def find_number(s: str, start: int=0) -> tuple[int, int]:
+    """
+    Finds the index of the first number.
+    :param s: string to be checked.
+    :param start: starting index to search. If not specified, 0.
+    :return: start index and length of the first number. If it does not exist, return (-1, 0).
+    """
+    start_index, length = -1, 0
+    for i in range(start, len(s)):
+        if s[i].isdigit():
+            start_index = i
+            break
+
+    if start_index == -1:
+        return -1, 0
+
+    for i in range(start_index, len(s)):
+        if s[i].isdigit():
+            length += 1
+        else:
+            break
+
+    return start_index, length
+
+
+def remove_str_between(s: str, start: int, end: int) -> str:
+    """
+    Removes the substring between the start index and the end index.
+    :param s: string to remove substring.
+    :param start: start index to remove.
+    :param end: next index of the last character of substring to remove
+    :return: removed string.
+    """
+    if start >= end:
+        return s
+
+    return s[:start] + s[end:]
+
+
 def to_poly(expr: str) -> Polynomial:
     """
     Converts the expression string to polynomial.
