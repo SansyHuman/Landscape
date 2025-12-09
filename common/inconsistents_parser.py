@@ -1,6 +1,7 @@
 import csv
 import numpy as np
 from common.utils import *
+import ast
 
 
 def lie_to_ade(lie_alg: str) -> tuple[str, int]:
@@ -156,7 +157,7 @@ def serialize_theory_name(theory_name: str) -> list[int]:
     return [ade_to_index[ade_class], alg_size, fund, antifund, adj, symm, symm_conj, antisymm, antisymm_conj]
 
 
-def inconsistents_parser(filename: str, inconsistents_path: str) -> None:
+def inconsistents_parser(filename: str, inconsistents_path: str) -> tuple[np.ndarray, np.ndarray]:
     """
     Parse consistent theories and inconsistent theories
     :param filename: File of consistent theories
@@ -199,3 +200,47 @@ def inconsistents_parser(filename: str, inconsistents_path: str) -> None:
     # GroupSize is the index of ADE classification.
     # matter contents are the number of such fields.
     index_group_fields = dict()
+
+    for content, index in field_contents_index.items():
+        vector = serialize_theory_name(content)
+        if vector[0] == 0:
+            continue
+
+        index_group_fields[index] = vector
+
+    input_data = []
+    output_data = []
+
+    for i in range(len(field_contents)):
+        if field_contents[i] not in index_group_fields:
+            continue
+        input_data.append(index_group_fields[field_contents[i]] + [a_charges[i], c_charges[i]])
+        output_data.append([1, 0]) # [consistent, inconsistent]
+
+    index_to_alg = {1: 'SU', 2: 'SO', 3: 'Sp', 4: 'SO', 5: 'E', 6: 'F', 7: 'G'}
+
+    for content, index in field_contents_index.items():
+        if index not in index_group_fields:
+            continue
+        vector = index_group_fields[index]
+        alg = index_to_alg[vector[0]]
+
+        inc_path = f'{inconsistents_path}/{alg}/{content}/{content}_log.txt'
+        if not os.path.isfile(inc_path):
+            continue
+
+        with open(inc_path) as inc_file:
+            data = inc_file.readlines()
+            for log in data:
+                log = ast.literal_eval(log.strip())
+                if log == '':
+                    continue
+                if log['consistency'] == 'inconsistent':
+                    input_data.append(index_group_fields[index] + [log['a'], log['c']])
+                    output_data.append([0, 1])
+
+    input_data = np.array(input_data)
+    output_data = np.array(output_data)
+
+    perm = np.random.permutation(len(input_data))
+    return input_data[perm], output_data[perm]

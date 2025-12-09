@@ -18,4 +18,11 @@ theories = ['SU2adj1nf1', 'SU2adj1nf2', 'Sp2adj1nf1', 'SO5adj1nf1', 'G2adj1nf1',
             'Sp3a3nf1', 'SO5adj2nf1']
 
 for theory in theories:
-    print(f'{theory}: {serialize_theory_name(theory)}')
+    vector = serialize_theory_name(theory)
+    print(f'{theory}: {vector}')
+    if vector[0] == 0:
+        continue
+
+    index_to_lie = {1: 'SU', 2: 'SO', 3: 'Sp', 4: 'SO', 5: 'E', 6: 'F', 7: 'G'}
+    if not os.path.isdir(f'../inconsistents/{index_to_lie[vector[0]]}/{theory}'):
+        print(f'{theory} directory does not exist')
