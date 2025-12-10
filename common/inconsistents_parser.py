@@ -74,11 +74,11 @@ def ade_to_lie(ade_class: str, size: int) -> str:
         return ''
 
 
-def serialize_theory_name(theory_name: str) -> list[int]:
+def serialize_theory_name(theory_name: str) -> tuple[int, ...]:
     """
-    Convert the theory name to a list of integer data.
+    Convert the theory name to a tuple of integer data.
     :param theory_name: Theory name.
-    :return: [GaugeGroup, GroupSize, fund, antifund, adj, symm, symm_conj, antisymm, antisymm_conj]
+    :return: (GaugeGroup, GroupSize, fund, antifund, adj, symm, symm_conj, antisymm, antisymm_conj)
     GaugeGroup: A=1, B=2, C=3, D=4, E=5, F=6, G=7
     GroupSize is the index of ADE classification.
     matter contents are the number of such fields.
@@ -88,7 +88,7 @@ def serialize_theory_name(theory_name: str) -> list[int]:
     gauge_group = theory_name[:num_start + num_len]
     ade_class, alg_size = lie_to_ade(gauge_group)
     if ade_class == '':
-        return [0, 0, 0, 0, 0, 0, 0, 0, 0]
+        return 0, 0, 0, 0, 0, 0, 0, 0, 0
 
     matter_contents = theory_name[num_start + num_len:]
     fund, antifund, adj, symm, symm_conj, antisymm, antisymm_conj = 0, 0, 0, 0, 0, 0, 0
@@ -154,7 +154,7 @@ def serialize_theory_name(theory_name: str) -> list[int]:
 
         antisymm_conj += antisymm_conj_cnt
 
-    return [ade_to_index[ade_class], alg_size, fund, antifund, adj, symm, symm_conj, antisymm, antisymm_conj]
+    return tuple([ade_to_index[ade_class], alg_size, fund, antifund, adj, symm, symm_conj, antisymm, antisymm_conj])
 
 
 def inconsistents_parser(filename: str, inconsistents_path: str) -> tuple[np.ndarray, np.ndarray]:
@@ -208,36 +208,56 @@ def inconsistents_parser(filename: str, inconsistents_path: str) -> tuple[np.nda
 
         index_group_fields[index] = vector
 
+    group_fields_dir = dict()
+
+    for group in os.listdir(inconsistents_path):
+        group_path = os.path.join(inconsistents_path, group)
+        if not os.path.isdir(group_path):
+            continue
+        for theory in os.listdir(group_path):
+            theory_path = os.path.join(group_path, theory)
+            if not os.path.isdir(theory_path):
+                continue
+            log_path = os.path.join(theory_path, f'{theory}_log.txt')
+            if not os.path.isfile(log_path):
+                continue
+            vector = serialize_theory_name(theory)
+            if vector[0] == 0:
+                continue
+            if vector in group_fields_dir:
+                group_fields_dir[vector].append(log_path)
+            else:
+                group_fields_dir[vector] = [log_path]
+
     input_data = []
     output_data = []
 
     for i in range(len(field_contents)):
         if field_contents[i] not in index_group_fields:
             continue
-        input_data.append(index_group_fields[field_contents[i]] + [a_charges[i], c_charges[i]])
-        output_data.append([1, 0]) # [consistent, inconsistent]
-
-    index_to_alg = {1: 'SU', 2: 'SO', 3: 'Sp', 4: 'SO', 5: 'E', 6: 'F', 7: 'G'}
+        input_data.append(list(index_group_fields[field_contents[i]]) + [a_charges[i], c_charges[i]])
+        output_data.append([0]) # 0: consistent, 1: inconsistent
 
     for content, index in field_contents_index.items():
         if index not in index_group_fields:
             continue
         vector = index_group_fields[index]
-        alg = index_to_alg[vector[0]]
-
-        inc_path = f'{inconsistents_path}/{alg}/{content}/{content}_log.txt'
-        if not os.path.isfile(inc_path):
+        if vector not in group_fields_dir:
+            print(f'Warning: the theory {content} does not have the log file.')
             continue
 
-        with open(inc_path) as inc_file:
-            data = inc_file.readlines()
-            for log in data:
-                log = ast.literal_eval(log.strip())
-                if log == '':
-                    continue
-                if log['consistency'] == 'inconsistent':
-                    input_data.append(index_group_fields[index] + [log['a'], log['c']])
-                    output_data.append([0, 1])
+        inc_paths = group_fields_dir[vector]
+
+        for inc_path in inc_paths:
+            with open(inc_path) as inc_file:
+                data = inc_file.readlines()
+                for log in data:
+                    log = ast.literal_eval(log.strip())
+                    if log == '':
+                        continue
+                    if log['consistency'] == 'inconsistent':
+                        input_data.append(list(index_group_fields[index]) + [log['a'], log['c']])
+                        output_data.append([1])
 
     input_data = np.array(input_data)
     output_data = np.array(output_data)

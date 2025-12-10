@@ -13,9 +13,14 @@ class InconsistencyClassificationModel(FullyConnectedNetwork):
         # args: dimension of hidden layers
         super().__init__(
             input_dim,
-            2,
+            1,
             *([(args[i], nn.ELU()) for i in range(len(args) - 1)] + [(args[-1], nn.ReLU())])
         )
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = super().forward(x)
+        return self.sigmoid(x)
 
 
 os.makedirs('./data', exist_ok=True)
@@ -46,7 +51,7 @@ for index, (x, y) in enumerate(dataloader_train):
     print('y shape: ', y.shape)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-criterion = nn.CrossEntropyLoss()
+criterion = nn.BCELoss()
 
 model = InconsistencyClassificationModel(input_dim,
                                          input_dim * 3,
@@ -119,27 +124,22 @@ with torch.no_grad():
     y_expect = y_expect.cpu().numpy()
     y_real = output_data
 
-    pred_expect = np.argmax(y_expect, axis=1)
-    pred_real = np.argmax(y_real, axis=1)
-
     cons_correct = 0
     cons_wrong = 0
     incons_correct = 0
     incons_wrong = 0
 
-    for i in range(len(pred_real)):
-        if pred_real[i] == 0:
-            if pred_real[i] == pred_expect[i]:
+    for i in range(len(y_expect)):
+        if y_real[i][0] == 0:
+            if y_expect[i][0] < 0.5:
                 cons_correct += 1
             else:
                 cons_wrong += 1
-        elif pred_real[i] == 1:
-            if pred_real[i] == pred_expect[i]:
+        elif y_real[i][0] == 1:
+            if y_expect[i][0] >= 0.5:
                 incons_correct += 1
             else:
                 incons_wrong += 1
-        else:
-            raise "Invalide prediction"
 
     cons_error = cons_wrong / (cons_correct + cons_wrong) * 100
     incons_error = incons_wrong / (incons_correct + incons_wrong) * 100
