@@ -28,7 +28,7 @@ def serialize_w_terms(w: str):
     return w_serial
 
 
-def build_dynkin_diagram(graph: nx.MultiDiGraph, ade_class: int, rank: int) -> None:
+def build_dynkin_diagram(graph: nx.MultiGraph, ade_class: int, rank: int) -> None:
     """
     Build a dynkin diagram.
     :param graph: Graph to build dynkin diagram. The graph is cleared before build.
@@ -56,7 +56,6 @@ def build_dynkin_diagram(graph: nx.MultiDiGraph, ade_class: int, rank: int) -> N
         ade_class = 1
         rank = 3
 
-    # Arrow goes from smaller index to larger index, and from long root to short root
     if ade_class == 1:  # An
         graph.add_nodes_from(
             [(i, {"simple_root": i, "short": 0, "mark": 1, "comark": 1})
@@ -101,8 +100,8 @@ def build_dynkin_diagram(graph: nx.MultiDiGraph, ade_class: int, rank: int) -> N
         graph.add_edges_from(
             [(i, i + 1) for i in range(1, rank - 1)]
         )
-        graph.add_edge(rank, rank - 1)
-        graph.add_edge(rank, rank - 1)
+        graph.add_edge(rank - 1, rank)
+        graph.add_edge(rank - 1, rank)
     elif ade_class == 4:  # Dn
         assert rank == 2 or rank >= 4
         if rank == 2:  # D2=A1 x A1
@@ -201,6 +200,9 @@ def build_dynkin_diagram(graph: nx.MultiDiGraph, ade_class: int, rank: int) -> N
         assert False
 
 
+matter_fields = ['q', 'qb', 'phi', 'S', 'Sb', 'A', 'Ab']
+
+
 class Superpotential:
     def __init__(self, theory: str, superpotential: str):
         """
@@ -213,9 +215,103 @@ class Superpotential:
         self.__build_graph()
 
     def __build_graph(self) -> None:
-        self.dynkin_diagram = nx.MultiDiGraph()
+        self.dynkin_diagram = nx.MultiGraph()
         self.superpotential_graph = nx.MultiDiGraph()
 
         ade_class = self.theory[0]
         rank = self.theory[1]
         build_dynkin_diagram(self.dynkin_diagram, ade_class, rank)
+
+        # superpotential attributes
+        # [node_type, matter, index]
+        # node_type
+        # 0: peripheral node connected to central nodes
+        # 1: central node which represents matter fields
+        # 2: central node which represents flipping fields
+        # 3: central node which represents terms in superpotential
+        # matter
+        # for peripheral nodes it is always 0
+        # for matter fields 1: fundamental, 2: antifundamental, 3: adjoint, 4: rank-2 symmetric tensor,
+        # 5: conjugate of rank-2 symmetric tensor, 6: rank-2 antisymmetric tensor, 7: conjugate of rank-2 antisymmetric tensor
+        # for flipping fields 1: M, 2: X
+        # for terms it is always 0
+        # index is the index of the fields of peripheral nodes connected to central field nodes starting from 1
+        # for non-peripheral nodes and peripheral terms index is always 0
+
+        M_num = 0
+        X_num = 0
+        for term in self.superpotential:
+            for op, index, _ in term:
+                if op == 'M' and index > M_num:
+                    M_num = index
+                elif op == 'X' and index > X_num:
+                    X_num = index
+
+        term_num = len(self.superpotential)
+
+        for i in range(len(matter_fields)):
+            field = matter_fields[i]
+            field_num = self.theory[i + 2]
+            if field_num > 0:
+                self.superpotential_graph.add_node(field, node_type=1, matter=i + 1, index=0)
+                self.superpotential_graph.add_nodes_from(
+                    [
+                        (f'{field}{j}', {'node_type': 0, 'matter': 0, 'index': j}) for j in range(1, field_num + 1)
+                    ]
+                )
+                self.superpotential_graph.add_edges_from(
+                    [
+                        (field, f'{field}{j}') for j in range(1, field_num + 1)
+                    ]
+                )
+
+        if M_num > 0:
+            self.superpotential_graph.add_node('M', node_type=2, matter=1, index=0)
+            self.superpotential_graph.add_nodes_from(
+                [
+                    (f'M{i}', {'node_type': 0, 'matter': 0, 'index': i}) for i in range(1, M_num + 1)
+                ]
+            )
+            self.superpotential_graph.add_edges_from(
+                [
+                    ('M', f'M{i}') for i in range(1, M_num + 1)
+                ]
+            )
+
+        if X_num > 0:
+            self.superpotential_graph.add_node('X', node_type=2, matter=2, index=0)
+            self.superpotential_graph.add_nodes_from(
+                [
+                    (f'X{i}', {'node_type': 0, 'matter': 0, 'index': i}) for i in range(1, X_num + 1)
+                ]
+            )
+            self.superpotential_graph.add_edges_from(
+                [
+                    ('X', f'X{i}') for i in range(1, X_num + 1)
+                ]
+            )
+
+        if term_num > 0:
+            self.superpotential_graph.add_node('Term', node_type=3, matter=0, index=0)
+            self.superpotential_graph.add_nodes_from(
+                [
+                    (f'Term{i}', {'node_type': 0, 'matter': 0, 'index': 0}) for i in range(1, term_num + 1)
+                ]
+            )
+            self.superpotential_graph.add_edges_from(
+                [
+                    ('Term', f'Term{i}') for i in range(1, term_num + 1)
+                ]
+            )
+
+        for i in range(len(self.superpotential)):
+            term = self.superpotential[i]
+            term_node = f'Term{i + 1}'
+
+            for op, index, exponent in term:
+                op_node = f'{op}{index}'
+                self.superpotential_graph.add_edges_from(
+                    [
+                        (term_node, op_node) for _ in range(exponent)
+                    ]
+                )

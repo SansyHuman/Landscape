@@ -5,10 +5,16 @@ import matplotlib.pyplot as plt
 import itertools as it
 
 
-dynkin_diagram = nx.MultiDiGraph()
+dynkin_diagram = nx.MultiGraph()
 algebra = serialize_theory_name(input('Lie algebra to draw: '))
 
 build_dynkin_diagram(dynkin_diagram, algebra[0], algebra[1])
+
+graph_data = from_networkx(dynkin_diagram, group_node_attrs=['short', 'mark', 'comark'])
+print('Graph nodes data: ')
+print(graph_data.x)
+print('Graph edges data: ')
+print(graph_data.edge_index)
 
 fig, ax = plt.subplots()
 node_pos = nx.planar_layout(dynkin_diagram)
