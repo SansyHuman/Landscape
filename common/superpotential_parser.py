@@ -1,8 +1,10 @@
 from torch_geometric.utils import from_networkx
+from torch_geometric.data import Data
 
 from common.utils import *
 from common.inconsistents_parser import *
 import networkx as nx
+
 
 
 def serialize_w_terms(w: str):
@@ -221,7 +223,9 @@ class Superpotential:
         ade_class = self.theory[0]
         rank = self.theory[1]
         build_dynkin_diagram(self.dynkin_diagram, ade_class, rank)
+        self.__build_superpotential_graph()
 
+    def __build_superpotential_graph(self) -> None:
         # superpotential attributes
         # [node_type, matter, index]
         # node_type
@@ -315,3 +319,42 @@ class Superpotential:
                         (term_node, op_node) for _ in range(exponent)
                     ]
                 )
+
+    def set_theory(self, theory: str) -> None:
+        """
+        Sets the theory of the superpotential.
+        :param theory: Theory of the superpotential.
+        """
+        self.theory = serialize_theory_name(theory)
+        self.dynkin_diagram.clear()
+
+        ade_class = self.theory[0]
+        rank = self.theory[1]
+        build_dynkin_diagram(self.dynkin_diagram, ade_class, rank)
+
+    def set_superpotential(self, superpotential: str) -> None:
+        """
+        Sets the superpotential. Note that if the superpotential and theory does not match,
+        it will cause error.
+        :param superpotential: Raw superpotential string.
+        """
+        self.superpotential = serialize_w_terms(superpotential)
+        self.superpotential_graph.clear()
+
+        self.__build_superpotential_graph()
+
+    def get_theory_data(self) -> Data:
+        """
+        Gets the data of the theory by dynkin diagram graph with node attribute
+        [short, mark, comark].
+        :return: PyG graph data of the dynkin diagram of the theory.
+        """
+        return from_networkx(self.dynkin_diagram, group_node_attrs=['short', 'mark', 'comark'])
+
+    def get_superpotential_data(self) -> Data:
+        """
+        Gets the data of the superpotential by graph with node attribute
+        [node_type, matter, index].
+        :return: PyG graph data of the superpotential graph.
+        """
+        return from_networkx(self.superpotential_graph, group_node_attrs=['node_type', 'matter', 'index'])
