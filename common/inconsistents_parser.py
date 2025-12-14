@@ -264,3 +264,13 @@ def inconsistents_parser(filename: str, inconsistents_path: str) -> tuple[np.nda
 
     perm = np.random.permutation(len(input_data))
     return input_data[perm], output_data[perm]
+
+
+def inconsistents_graph_parser(filename: str, inconsistents_path: str) -> list[PairData]:
+    """
+    Parses consistent theories and inconsistent theories.
+    :param filename: File of consistent theories
+    :param inconsistents_path: Folder of inconsistent theories
+    :return: List of PairData which contains dynkin diagram and superpotential graph and consistency mark as a target y.
+    """
+    pass

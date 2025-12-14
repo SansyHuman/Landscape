@@ -1,11 +1,12 @@
 import math
 import json
 import os
-from typing import Union
+from typing import Union, Any
 
 from sklearn.cluster import KMeans, BisectingKMeans
 from torch import nn
 from torch.utils.data import Dataset
+from torch_geometric.data import Data
 import torch
 import numpy as np
 
@@ -421,3 +422,22 @@ def save_cluster_data(data, data_name: list[str], cluster_obj: Union[KMeans, Bis
                 csv_file.write('\n')
 
             csv_file.write('\n')
+
+
+class PairData(Data):
+    """
+    Class of a pair of graph data. The data key name should be the following;
+    x_1: node features of first graph
+    x_2: node features of second graph
+    edge_index_1: graph connectivity matrix of first graph
+    edge_index_2: graph connectivity matrix of second graph
+    y: target data of the pair of input graphs
+    When you make dataloader of PairData, you should put follow batch
+    ['x_1', 'x_2'].
+    """
+    def __inc__(self, key: str, value: Any, *args, **kwargs) -> Any:
+        if key == 'edge_index_1':
+            return self.x_1.size(0)
+        if key == 'edge_index_2':
+            return self.x_2.size(0)
+        return super().__inc__(key, value, *args, **kwargs)
