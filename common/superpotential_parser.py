@@ -1,10 +1,12 @@
-from torch_geometric.utils import from_networkx
-from torch_geometric.data import Data
+from typing import Union
 
-from common.utils import *
-from common.inconsistents_parser import *
+from torch_geometric.data import Data
+from torch_geometric.utils import from_networkx
+
 import networkx as nx
 
+from common.inconsistents_parser import serialize_theory_name
+from common.utils import find_number
 
 
 def serialize_w_terms(w: str):
@@ -25,6 +27,9 @@ def serialize_w_term_list(w: list[str]):
     """
     w_serial = []
     for term in w:
+        if term.strip() == '':
+            continue
+
         term_data = []
         ops = term.strip().split('*')
         for op in ops:
@@ -220,24 +225,20 @@ matter_fields = ['q', 'qb', 'phi', 'S', 'Sb', 'A', 'Ab']
 
 
 class Superpotential:
-    def __init__(self):
-        """
-        Create an empty superpotential object.
-        """
-        self.theory: tuple[int, ...] = None
-        self.superpotential: list[Any] = None
-        self.dynkin_diagram = nx.MultiGraph()
-        self.superpotential_graph = nx.MultiDiGraph()
-
-    def __init__(self, theory: str, superpotential: str):
+    def __init__(self, theory: str=None, superpotential: str=None):
         """
         Create superpotential object.
         :param theory: Theory of the superpotential.
         :param superpotential: Raw superpotential string.
         """
-        self.theory = serialize_theory_name(theory)
-        self.superpotential = serialize_w_terms(superpotential)
-        self.__build_graph()
+        self.theory = None if theory is None else serialize_theory_name(theory)
+        self.superpotential = None if superpotential is None else serialize_w_terms(superpotential)
+
+        if theory is not None and superpotential is not None:
+            self.__build_graph()
+        else:
+            self.dynkin_diagram = nx.MultiGraph()
+            self.superpotential_graph = nx.MultiDiGraph()
 
     def __build_graph(self) -> None:
         self.dynkin_diagram = nx.MultiGraph()
@@ -380,4 +381,11 @@ class Superpotential:
         [node_type, matter, index].
         :return: PyG graph data of the superpotential graph.
         """
-        return from_networkx(self.superpotential_graph, group_node_attrs=['node_type', 'matter', 'index'])
+        try:
+            return from_networkx(self.superpotential_graph, group_node_attrs=['node_type', 'matter', 'index'])
+        except ValueError as e:
+            print(self.theory)
+            print(self.superpotential)
+            print(list(self.dynkin_diagram.nodes(data=True)))
+            print(list(self.superpotential_graph.nodes(data=True)))
+            raise e

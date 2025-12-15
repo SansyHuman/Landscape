@@ -1,7 +1,7 @@
 import csv
 import numpy as np
+
 from common.utils import *
-from common.superpotential_parser import *
 import ast
 import random
 
@@ -95,13 +95,22 @@ def serialize_theory_name(theory_name: str) -> tuple[int, ...]:
     matter_contents = theory_name[num_start + num_len:]
     fund, antifund, adj, symm, symm_conj, antisymm, antisymm_conj = 0, 0, 0, 0, 0, 0, 0
 
+    # nf has different convention amongst different lie algebras.
+    # For SU(A), it means a pair of fundamental and antifundamental to remove gauge anomaly.
+    # For Sp(C), it means two fundamental to remove Witten anomaly.
+    # For SO(B, D) and G2, there is no anomaly constraint so it is just the number of fundamental.
     nf_start = matter_contents.find('nf')
     if nf_start != -1:
         nf_cnt_start, nf_cnt_len = find_number(matter_contents, nf_start + 2)
         nf_cnt = int(matter_contents[nf_cnt_start:nf_cnt_start + nf_cnt_len])
 
-        fund += nf_cnt
-        antifund += nf_cnt
+        if ade_class == 'A':
+            fund += nf_cnt
+            antifund += nf_cnt
+        elif ade_class == 'C':
+            fund += 2 * nf_cnt
+        else:
+            fund += nf_cnt
 
         matter_contents = remove_str_between(matter_contents, nf_start, nf_cnt_start + nf_cnt_len)
 
@@ -140,7 +149,15 @@ def serialize_theory_name(theory_name: str) -> tuple[int, ...]:
         symm_conj_cnt_start, symm_conj_cnt_len = find_number(matter_contents, symm_conj_start + 1)
         symm_conj_cnt = int(matter_contents[symm_conj_cnt_start:symm_conj_cnt_start + symm_conj_cnt_len])
 
-        symm_conj += symm_conj_cnt
+        # 14-dim rep in SO5 is rank-2 symmetric tensor, but it is not in Sp2.
+        # So 14-dim field is noted by capital S, and rank-2 symmetric tensor of SO5 also does.
+        # Also, SO and Sp representations are (pseudo)real so there is no conjugate, so s and S are mixed.
+        if ade_class == 'B' and alg_size == 2:
+            symm += symm_conj_cnt
+        elif ade_class == 'C' and alg_size == 2:
+            symm += symm_conj_cnt
+        else:
+            symm_conj += symm_conj_cnt
 
     antisymm_start = matter_contents.find('a')
     if antisymm_start != -1:
@@ -324,6 +341,7 @@ def inconsistents_graph_parser(filename: str, inconsistents_path: str) -> list[P
 
     group_fields_dir = get_inconsistent_paths(inconsistents_path)
 
+    from common.superpotential_parser import Superpotential
     w_obj = Superpotential()
     data_list: list[PairData] = []
     prev_theory = None

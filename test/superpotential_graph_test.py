@@ -5,12 +5,20 @@ import matplotlib.pyplot as plt
 import itertools as it
 
 
-theory = input('Theory name: ')
-w = input('Superpotential in list format: ')
-
-w_obj = Superpotential(theory, w)
+w_obj = Superpotential()
+prev_theory = None
 
 while True:
+    theory = input('Theory name: ')
+    if theory == 'exit':
+        break
+    w = input('Superpotential in list format: ')
+
+    if prev_theory != theory:
+        w_obj.set_theory(serialize_theory_name(theory))
+    w_obj.set_superpotential(w[1:-1].split(','))
+    prev_theory = theory
+
     dynkin_diagram_data = w_obj.get_theory_data()
     print('Dynkin diagram nodes data: ')
     print(dynkin_diagram_data.x)
@@ -56,13 +64,3 @@ while True:
     )
 
     plt.show()
-
-    prev_theory = theory
-    theory = input('Theory name: ')
-    if theory == 'exit':
-        break
-    w = input('Superpotential in list format: ')
-
-    if prev_theory != theory:
-        w_obj.set_theory(serialize_theory_name(theory))
-    w_obj.set_superpotential(w[1:-1].split(','))
