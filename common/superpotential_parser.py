@@ -8,9 +8,23 @@ import networkx as nx
 
 
 def serialize_w_terms(w: str):
+    """
+    Serialize a superpotential string.
+    :param w: Raw superpotential list string.
+    :return: Serialized superpotential.
+    """
     w_terms = w[1:-1].split(',')
+    return serialize_w_term_list(w_terms)
+
+
+def serialize_w_term_list(w: list[str]):
+    """
+    Serialize a list of superpotential string.
+    :param w: List of superpotential term strings.
+    :return: Serialized superpotential.
+    """
     w_serial = []
-    for term in w_terms:
+    for term in w:
         term_data = []
         ops = term.strip().split('*')
         for op in ops:
@@ -206,6 +220,15 @@ matter_fields = ['q', 'qb', 'phi', 'S', 'Sb', 'A', 'Ab']
 
 
 class Superpotential:
+    def __init__(self):
+        """
+        Create an empty superpotential object.
+        """
+        self.theory: tuple[int, ...] = None
+        self.superpotential: list[Any] = None
+        self.dynkin_diagram = nx.MultiGraph()
+        self.superpotential_graph = nx.MultiDiGraph()
+
     def __init__(self, theory: str, superpotential: str):
         """
         Create superpotential object.
@@ -320,25 +343,25 @@ class Superpotential:
                     ]
                 )
 
-    def set_theory(self, theory: str) -> None:
+    def set_theory(self, theory: Union[str, tuple[int, ...]]) -> None:
         """
         Sets the theory of the superpotential.
-        :param theory: Theory of the superpotential.
+        :param theory: Theory of the superpotential in string or serialized tuple.
         """
-        self.theory = serialize_theory_name(theory)
+        self.theory = serialize_theory_name(theory) if isinstance(theory, str) else theory
         self.dynkin_diagram.clear()
 
         ade_class = self.theory[0]
         rank = self.theory[1]
         build_dynkin_diagram(self.dynkin_diagram, ade_class, rank)
 
-    def set_superpotential(self, superpotential: str) -> None:
+    def set_superpotential(self, superpotential: Union[str, list[str]]) -> None:
         """
         Sets the superpotential. Note that if the superpotential and theory does not match,
         it will cause error.
-        :param superpotential: Raw superpotential string.
+        :param superpotential: Raw superpotential string or list of term strings.
         """
-        self.superpotential = serialize_w_terms(superpotential)
+        self.superpotential = serialize_w_terms(superpotential) if isinstance(superpotential, str) else serialize_w_term_list(superpotential)
         self.superpotential_graph.clear()
 
         self.__build_superpotential_graph()

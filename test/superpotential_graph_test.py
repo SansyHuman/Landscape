@@ -57,10 +57,12 @@ while True:
 
     plt.show()
 
+    prev_theory = theory
     theory = input('Theory name: ')
     if theory == 'exit':
         break
     w = input('Superpotential in list format: ')
 
-    w_obj.set_theory(theory)
-    w_obj.set_superpotential(w)
+    if prev_theory != theory:
+        w_obj.set_theory(serialize_theory_name(theory))
+    w_obj.set_superpotential(w[1:-1].split(','))

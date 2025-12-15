@@ -1,7 +1,9 @@
 import csv
 import numpy as np
 from common.utils import *
+from common.superpotential_parser import *
 import ast
+import random
 
 
 def lie_to_ade(lie_alg: str) -> tuple[str, int]:
@@ -157,6 +159,36 @@ def serialize_theory_name(theory_name: str) -> tuple[int, ...]:
     return tuple([ade_to_index[ade_class], alg_size, fund, antifund, adj, symm, symm_conj, antisymm, antisymm_conj])
 
 
+def get_inconsistent_paths(inconsistents_path: str) -> dict[tuple[int, ...], list[str]]:
+    """
+    Gets all inconsistent theory paths.
+    :param inconsistents_path: Folder of inconsistent theories.
+    :return: dictionary of serialized theory name and corresponding paths to inconsistent theories.
+    """
+    group_fields_dir: dict[tuple[int, ...], list[str]] = dict()
+
+    for group in os.listdir(inconsistents_path):
+        group_path = os.path.join(inconsistents_path, group)
+        if not os.path.isdir(group_path):
+            continue
+        for theory in os.listdir(group_path):
+            theory_path = os.path.join(group_path, theory)
+            if not os.path.isdir(theory_path):
+                continue
+            log_path = os.path.join(theory_path, f'{theory}_log.txt')
+            if not os.path.isfile(log_path):
+                continue
+            vector = serialize_theory_name(theory)
+            if vector[0] == 0:
+                continue
+            if vector in group_fields_dir:
+                group_fields_dir[vector].append(log_path)
+            else:
+                group_fields_dir[vector] = [log_path]
+
+    return group_fields_dir
+
+
 def inconsistents_parser(filename: str, inconsistents_path: str) -> tuple[np.ndarray, np.ndarray]:
     """
     Parse consistent theories and inconsistent theories
@@ -208,26 +240,7 @@ def inconsistents_parser(filename: str, inconsistents_path: str) -> tuple[np.nda
 
         index_group_fields[index] = vector
 
-    group_fields_dir = dict()
-
-    for group in os.listdir(inconsistents_path):
-        group_path = os.path.join(inconsistents_path, group)
-        if not os.path.isdir(group_path):
-            continue
-        for theory in os.listdir(group_path):
-            theory_path = os.path.join(group_path, theory)
-            if not os.path.isdir(theory_path):
-                continue
-            log_path = os.path.join(theory_path, f'{theory}_log.txt')
-            if not os.path.isfile(log_path):
-                continue
-            vector = serialize_theory_name(theory)
-            if vector[0] == 0:
-                continue
-            if vector in group_fields_dir:
-                group_fields_dir[vector].append(log_path)
-            else:
-                group_fields_dir[vector] = [log_path]
+    group_fields_dir = get_inconsistent_paths(inconsistents_path)
 
     input_data = []
     output_data = []
@@ -273,4 +286,96 @@ def inconsistents_graph_parser(filename: str, inconsistents_path: str) -> list[P
     :param inconsistents_path: Folder of inconsistent theories
     :return: List of PairData which contains dynkin diagram and superpotential graph and consistency mark as a target y.
     """
-    pass
+    csv.field_size_limit(np.iinfo(np.int32).max)
+
+    data = None
+    with open(filename) as csvfile:
+        reader = csv.reader(csvfile)
+        data = list(reader)
+
+    field_content_index, w_index = -1, -1
+    for i in range(len(data[0])):
+        if data[0][i] == "Name":
+            field_content_index = i
+        elif data[0][i] == "Superpotentials":
+            w_index = i
+
+    field_contents_index = dict()
+    field_contents = []
+    superpotentials = []
+
+    for i in range(1, len(data)):
+        field_content = data[i][field_content_index]
+        w = data[i][w_index]
+
+        if field_content not in field_contents_index:
+            field_contents_index[field_content] = len(field_contents_index)
+        field_contents.append(field_contents_index[field_content])
+        superpotentials.append(w)
+
+    index_group_fields = dict()
+
+    for content, index in field_contents_index.items():
+        vector = serialize_theory_name(content)
+        if vector[0] == 0:
+            continue
+
+        index_group_fields[index] = vector
+
+    group_fields_dir = get_inconsistent_paths(inconsistents_path)
+
+    w_obj = Superpotential()
+    data_list: list[PairData] = []
+    prev_theory = None
+
+    for i in range(len(field_contents)):
+        if field_contents[i] not in index_group_fields:
+            continue
+        theory = index_group_fields[field_contents[i]]
+        w = superpotentials[i]
+
+        if prev_theory != theory:
+            w_obj.set_theory(theory)
+        w_obj.set_superpotential(w)
+
+        dynkin_diagram = w_obj.get_theory_data()
+        superpotential_graph = w_obj.get_superpotential_data()
+
+        data = PairData(x_1=dynkin_diagram.x, x_2=superpotential_graph.x,
+                        edge_index_1=dynkin_diagram.edge_index, edge_index_2=superpotential_graph.edge_index,
+                        y=torch.tensor([0])) # 0: consistent, 1: inconsistent
+        data_list.append(data)
+        prev_theory = theory
+
+    for content, index in field_contents_index.items():
+        if index not in index_group_fields:
+            continue
+        vector = index_group_fields[index]
+        if vector not in group_fields_dir:
+            print(f'Warning: the theory {content} does not have the log file.')
+            continue
+
+        w_obj.set_theory(content)
+        inc_paths = group_fields_dir[vector]
+
+        for inc_path in inc_paths:
+            with open(inc_path) as inc_file:
+                data = inc_file.readlines()
+                for log in data:
+                    log = ast.literal_eval(log.strip())
+                    if log == '':
+                        continue
+                    if log['consistency'] == 'inconsistent':
+                        w_obj.set_superpotential(log['w'])
+
+                        dynkin_diagram = w_obj.get_theory_data()
+                        superpotential_graph = w_obj.get_superpotential_data()
+
+                        data = PairData(x_1=dynkin_diagram.x, x_2=superpotential_graph.x,
+                                        edge_index_1=dynkin_diagram.edge_index,
+                                        edge_index_2=superpotential_graph.edge_index,
+                                        y=torch.tensor([1]))
+                        data_list.append(data)
+
+    random.shuffle(data_list)
+    return data_list
