@@ -221,6 +221,70 @@ def build_dynkin_diagram(graph: nx.MultiGraph, ade_class: int, rank: int) -> Non
         assert False
 
 
+def calculate_rep_dimensions(theory: tuple[int, ...]) -> tuple[int, ...]:
+    """
+    Calculates the dimensions of each representations of the theory.
+    :param theory: Serialized theory name.
+    :return: Tuple of dimension of fundamental, antifundamental, adjoint, rank-2 symmetric tensor,
+    conjugate of rank-2 symmetric tensor, rank-2 antisymmetric tensor, and conjugate of rank-2 antisymmetric tensor.
+    """
+    ade_class = theory[0]
+    rank = theory[1]
+
+    fund = 0
+    adj = 0
+    symm = 0
+    antisymm = 0
+
+    if ade_class == 1:
+        # SU(n + 1)=An, n + 1=N
+        # fundamental = N
+        # adjoint = N^2 - 1
+        # rank-2 symmetric = N(N + 1) / 2
+        # rank-2 antisymmetric = N(N - 1) / 2
+        N = rank + 1
+        fund = N
+        adj = N**2 - 1
+        symm = N * (N + 1) // 2
+        antisymm = N * (N - 1) // 2
+    elif ade_class == 2:
+        # SO(2n + 1)=Bn, 2n + 1=N
+        # fundamental = N
+        # rank-2 symmetric = N(N + 1) / 2 - 1
+        # rank-2 antisymmetric = adjoint = N(N - 1) / 2
+        N = 2 * rank + 1
+        fund = N
+        symm = N * (N + 1) // 2 - 1
+        antisymm = N * (N - 1) // 2
+        adj = antisymm
+    elif ade_class == 3:
+        # Sp(n)=Usp(2n)=Cn, N=n
+        # fundamental = 2N
+        # rank-2 symmetric = adjoint = 2N(2N + 1) / 2
+        # rank-2 antisymmetric = 2N(2N - 1) / 2 - 1
+        N = rank
+        fund = 2 * N
+        symm = 2 * N * (2 * N + 1) // 2
+        antisymm = 2 * N * (2 * N - 1) // 2 - 1
+        adj = symm
+    elif ade_class == 4:
+        # SO(2n)=Dn, N=2n
+        # fundamental = N
+        # rank-2 symmetric = N(N + 1) / 2 - 1
+        # rank-2 antisymmetric = adjoint = N(N - 1) / 2
+        N = 2 * rank
+        fund = N
+        symm = N * (N + 1) // 2 - 1
+        antisymm = N * (N - 1) // 2
+        adj = antisymm
+    elif ade_class == 7: # G2
+        fund = 7
+        adj = 14
+        symm = 27
+        antisymm = 14
+    return fund, fund, adj, symm, symm, antisymm, antisymm
+
+
 matter_fields = ['q', 'qb', 'phi', 'S', 'Sb', 'A', 'Ab']
 
 

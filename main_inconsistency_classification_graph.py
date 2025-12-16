@@ -57,30 +57,30 @@ class GraphInconsistencyClassifier(nn.Module):
         assert len(dynkin_hidden_channels) > 0 and len(w_hidden_channels) > 0
 
         self.dropout = dropout
-        self.conv_dynkin: list[pyg_nn.GCNConv] = []
-        self.conv_w: list[pyg_nn.GCNConv] = []
+        self.conv_dynkin = nn.ModuleList()
+        self.conv_w = nn.ModuleList()
 
-        self.conv_dynkin.append(pyg_nn.GCNConv(dynkin_features, dynkin_hidden_channels[0]))
+        self.conv_dynkin.append(pyg_nn.GraphConv(dynkin_features, dynkin_hidden_channels[0]))
         for i in range(len(dynkin_hidden_channels) - 1):
-            self.conv_dynkin.append(pyg_nn.GCNConv(dynkin_hidden_channels[i], dynkin_hidden_channels[i + 1]))
+            self.conv_dynkin.append(pyg_nn.GraphConv(dynkin_hidden_channels[i], dynkin_hidden_channels[i + 1]))
 
-        self.conv_w.append(pyg_nn.GCNConv(w_features, w_hidden_channels[0]))
+        self.conv_w.append(pyg_nn.GraphConv(w_features, w_hidden_channels[0]))
         for i in range(len(w_hidden_channels) - 1):
-            self.conv_w.append(pyg_nn.GCNConv(w_hidden_channels[i], w_hidden_channels[i + 1]))
+            self.conv_w.append(pyg_nn.GraphConv(w_hidden_channels[i], w_hidden_channels[i + 1]))
 
         self.lin = nn.Linear(dynkin_hidden_channels[-1] + w_hidden_channels[-1], 1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x_dynkin, x_w, edge_index_dynkin, edge_index_w, batch_dynkin, batch_w):
         for i in range(len(self.conv_dynkin)):
-            x_dynkin = self.conv_dynkin[i](x_dynkin)
+            x_dynkin = self.conv_dynkin[i](x_dynkin, edge_index_dynkin)
             if i != len(self.conv_dynkin) - 1:
                 x_dynkin = F.elu(x_dynkin)
                 x_dynkin = F.dropout(x_dynkin, p=self.dropout, training=self.training)
         x_dynkin = pyg_nn.global_mean_pool(x_dynkin, batch_dynkin)
 
         for i in range(len(self.conv_w)):
-            x_w = self.conv_w[i](x_w)
+            x_w = self.conv_w[i](x_w, edge_index_w)
             if i != len(self.conv_w) - 1:
                 x_w = F.elu(x_w)
                 x_w = F.dropout(x_w, p=self.dropout, training=self.training)
@@ -92,3 +92,157 @@ class GraphInconsistencyClassifier(nn.Module):
         x_total = self.lin(x_total)
 
         return self.sigmoid(x_total)
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f'Avaliable device: {device}')
+criterion = nn.BCELoss()
+
+dynkin_features=dataset[0].x_1.shape[1]
+w_features=dataset[0].x_2.shape[1]
+
+model = GraphInconsistencyClassifier(dynkin_features, w_features,
+                                     [dynkin_features * 2, dynkin_features * 2],
+                                     [w_features * 2, w_features * 2, w_features * 3]).to(device)
+
+print(model)
+batch = next(iter(test_loader))
+print('Inconsistency classification model shape: ', model(
+    batch.x_1.float().to(device), batch.x_2.float().to(device),
+    batch.edge_index_1.to(device), batch.edge_index_2.to(device),
+    batch.x_1_batch.to(device), batch.x_2_batch.to(device)
+).shape)
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+best_loss = 1e10
+
+checkpoint = None
+checkpoint_file_name = f'./checkpoint_inconsistency_classification_graph.tar'
+if os.path.isfile(checkpoint_file_name):
+    print('Checkpoint available. Loads checkpoint...')
+    checkpoint = torch.load(checkpoint_file_name, map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    best_loss = checkpoint['best_loss']
+
+for epoch in range(epoch_num):
+    model.train()
+    for _, data in enumerate(train_loader):
+        x_dynkin = data.x_1.float().to(device)
+        x_w = data.x_2.float().to(device)
+        edge_index_dynkin = data.edge_index_1.to(device)
+        edge_index_w = data.edge_index_2.to(device)
+        batch_dynkin = data.x_1_batch.to(device)
+        batch_w = data.x_2_batch.to(device)
+        y = data.y.float().to(device)
+
+        outputs = model(
+            x_dynkin, x_w,
+            edge_index_dynkin, edge_index_w,
+            batch_dynkin, batch_w
+        )
+        outputs = torch.squeeze(outputs)
+        loss = criterion(outputs, y)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    model.eval()
+    test_loss = 0.0
+    error = 0.0
+    test_cnt = 0
+
+    with torch.no_grad():
+        for _, data in enumerate(test_loader):
+            x_dynkin = data.x_1.float().to(device)
+            x_w = data.x_2.float().to(device)
+            edge_index_dynkin = data.edge_index_1.to(device)
+            edge_index_w = data.edge_index_2.to(device)
+            batch_dynkin = data.x_1_batch.to(device)
+            batch_w = data.x_2_batch.to(device)
+            y = data.y.float().to(device)
+
+            outputs = model(
+                x_dynkin, x_w,
+                edge_index_dynkin, edge_index_w,
+                batch_dynkin, batch_w
+            )
+            outputs = torch.squeeze(outputs)
+            loss = criterion(outputs, y)
+
+            test_loss += loss.item()
+
+    print(f'epoch {epoch + 1} test loss: {test_loss / len(test_loader)}')
+    if test_loss < best_loss:
+        best_loss = test_loss
+        print('New best loss obtained. Saving model...')
+        torch.save({
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'best_loss': best_loss
+        }, checkpoint_file_name)
+
+final_loader = DataLoader(dataset, batch_size=256, shuffle=False, follow_batch=['x_1', 'x_2'])
+
+checkpoint = torch.load(checkpoint_file_name, map_location=device)
+model.load_state_dict(checkpoint['model_state_dict'])
+optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+with torch.no_grad():
+    cons_correct = 0
+    cons_wrong = 0
+    incons_correct = 0
+    incons_wrong = 0
+
+    for _, data in enumerate(final_loader):
+        x_dynkin = data.x_1.float().to(device)
+        x_w = data.x_2.float().to(device)
+        edge_index_dynkin = data.edge_index_1.to(device)
+        edge_index_w = data.edge_index_2.to(device)
+        batch_dynkin = data.x_1_batch.to(device)
+        batch_w = data.x_2_batch.to(device)
+        y_real = data.y
+
+        y_expect = model(
+            x_dynkin, x_w,
+            edge_index_dynkin, edge_index_w,
+            batch_dynkin, batch_w
+        )
+        y_expect = torch.squeeze(y_expect)
+
+        for i in range(len(y_expect)):
+            if y_real[i] == 0:
+                if y_expect[i] < 0.5:
+                    cons_correct += 1
+                else:
+                    cons_wrong += 1
+            elif y_real[i] == 1:
+                if y_expect[i] >= 0.5:
+                    incons_correct += 1
+                else:
+                    incons_wrong += 1
+
+    cons_error = cons_wrong / (cons_correct + cons_wrong) * 100
+    incons_error = incons_wrong / (incons_correct + incons_wrong) * 100
+    total_error = (cons_wrong + incons_wrong) / (cons_correct + incons_correct + cons_wrong + incons_wrong) * 100
+
+    with open(f'./data/{filename}_inconsistency_classification_graph.csv', 'w') as csv_file:
+        csv_file.write(', Correct, Incorrect, Error (%)\n')
+        csv_file.write(f'Consistent, {cons_correct}, {cons_wrong}, {cons_error}\n')
+        csv_file.write(f'Inconsistent, {incons_correct}, {incons_wrong}, {incons_error}\n')
+        csv_file.write(f'Total, {cons_correct + incons_correct}, {cons_wrong + incons_wrong}, {total_error}')
+
+    plt.style.use('default')
+    plt.rcParams['figure.figsize'] = (16, 12)
+    plt.rcParams['font.size'] = 15
+
+    fig, ax = plt.subplots()
+
+    fig.suptitle('Inconsistency classification errors')
+
+    p = ax.bar(['Consistent', 'Inconsistent', 'Total'], [cons_error, incons_error, total_error])
+    ax.bar_label(p, fmt='%.2f')
+    ax.set_ylabel('Error (%)')
+
+    plt.savefig(f'./data/{filename}_inconsistency_classification_graph.png')
+    plt.show()
