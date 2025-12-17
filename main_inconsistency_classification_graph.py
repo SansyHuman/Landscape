@@ -108,7 +108,8 @@ w_features=dataset[0].x_2.shape[1]
 
 model = GraphInconsistencyClassifier(dynkin_features, w_features,
                                      [dynkin_features * 2, dynkin_features * 2, dynkin_features * 2],
-                                     [w_features * 2, w_features * 3]).to(device)
+                                     [w_features * 2, w_features * 3],
+                                     dropout=1.0 / 3.0).to(device)
 
 print(model)
 batch = next(iter(test_loader))
