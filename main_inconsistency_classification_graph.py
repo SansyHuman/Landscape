@@ -59,14 +59,18 @@ class GraphInconsistencyClassifier(nn.Module):
         self.dropout = dropout
         self.conv_dynkin = nn.ModuleList()
         self.conv_w = nn.ModuleList()
+        self.norm_dynkin = nn.ModuleList()
+        self.norm_w = nn.ModuleList()
 
         self.conv_dynkin.append(pyg_nn.GraphConv(dynkin_features, dynkin_hidden_channels[0]))
         for i in range(len(dynkin_hidden_channels) - 1):
             self.conv_dynkin.append(pyg_nn.GraphConv(dynkin_hidden_channels[i], dynkin_hidden_channels[i + 1]))
+            self.norm_dynkin.append(pyg_nn.norm.GraphNorm(dynkin_hidden_channels[i]))
 
         self.conv_w.append(pyg_nn.GraphConv(w_features, w_hidden_channels[0]))
         for i in range(len(w_hidden_channels) - 1):
             self.conv_w.append(pyg_nn.GraphConv(w_hidden_channels[i], w_hidden_channels[i + 1]))
+            self.norm_w.append(pyg_nn.norm.GraphNorm(w_hidden_channels[i]))
 
         self.lin = nn.Linear(dynkin_hidden_channels[-1] + w_hidden_channels[-1], 1)
         self.sigmoid = nn.Sigmoid()
@@ -75,6 +79,7 @@ class GraphInconsistencyClassifier(nn.Module):
         for i in range(len(self.conv_dynkin)):
             x_dynkin = self.conv_dynkin[i](x_dynkin, edge_index_dynkin)
             if i != len(self.conv_dynkin) - 1:
+                x_dynkin = self.norm_dynkin[i](x_dynkin, batch_dynkin)
                 x_dynkin = F.elu(x_dynkin)
                 x_dynkin = F.dropout(x_dynkin, p=self.dropout, training=self.training)
         x_dynkin = pyg_nn.global_mean_pool(x_dynkin, batch_dynkin)
@@ -82,6 +87,7 @@ class GraphInconsistencyClassifier(nn.Module):
         for i in range(len(self.conv_w)):
             x_w = self.conv_w[i](x_w, edge_index_w)
             if i != len(self.conv_w) - 1:
+                x_w = self.norm_w[i](x_w, batch_w)
                 x_w = F.elu(x_w)
                 x_w = F.dropout(x_w, p=self.dropout, training=self.training)
         x_w = pyg_nn.global_mean_pool(x_w, batch_w)
@@ -101,8 +107,8 @@ dynkin_features=dataset[0].x_1.shape[1]
 w_features=dataset[0].x_2.shape[1]
 
 model = GraphInconsistencyClassifier(dynkin_features, w_features,
-                                     [dynkin_features * 2, dynkin_features * 2],
-                                     [w_features * 2, w_features * 2, w_features * 3]).to(device)
+                                     [dynkin_features * 2, dynkin_features * 2, dynkin_features * 2],
+                                     [w_features * 2, w_features * 3]).to(device)
 
 print(model)
 batch = next(iter(test_loader))
