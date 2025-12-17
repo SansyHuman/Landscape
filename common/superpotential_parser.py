@@ -302,11 +302,11 @@ class Superpotential:
             self.__build_graph()
         else:
             self.dynkin_diagram = nx.MultiGraph()
-            self.superpotential_graph = nx.MultiDiGraph()
+            self.superpotential_graph = nx.MultiGraph()
 
     def __build_graph(self) -> None:
         self.dynkin_diagram = nx.MultiGraph()
-        self.superpotential_graph = nx.MultiDiGraph()
+        self.superpotential_graph = nx.MultiGraph()
 
         ade_class = self.theory[0]
         rank = self.theory[1]
@@ -315,7 +315,7 @@ class Superpotential:
 
     def __build_superpotential_graph(self) -> None:
         # superpotential attributes
-        # [node_type, matter, index]
+        # [node_type, matter, dim, index]
         # node_type
         # 0: peripheral node connected to central nodes
         # 1: central node which represents matter fields
@@ -327,6 +327,7 @@ class Superpotential:
         # 5: conjugate of rank-2 symmetric tensor, 6: rank-2 antisymmetric tensor, 7: conjugate of rank-2 antisymmetric tensor
         # for flipping fields 1: M, 2: X
         # for terms it is always 0
+        # dim is the dimension of the representation for central fields, otherwise 0.
         # index is the index of the fields of peripheral nodes connected to central field nodes starting from 1
         # for non-peripheral nodes and peripheral terms index is always 0
 
@@ -341,27 +342,41 @@ class Superpotential:
 
         term_num = len(self.superpotential)
 
+        rep_dims = calculate_rep_dimensions(self.theory)
         for i in range(len(matter_fields)):
             field = matter_fields[i]
             field_num = self.theory[i + 2]
             if field_num > 0:
-                self.superpotential_graph.add_node(field, node_type=1, matter=i + 1, index=0)
-                self.superpotential_graph.add_nodes_from(
-                    [
-                        (f'{field}{j}', {'node_type': 0, 'matter': 0, 'index': j}) for j in range(1, field_num + 1)
-                    ]
-                )
-                self.superpotential_graph.add_edges_from(
-                    [
-                        (field, f'{field}{j}') for j in range(1, field_num + 1)
-                    ]
-                )
+                # For SU2(A1), fundamental is identical to antifundamental, so put all antifundamental nodes to fundamental central node.
+                if i == 1 and self.theory[0] == 1 and self.theory[1] == 1:
+                    self.superpotential_graph.add_nodes_from(
+                        [
+                            (f'qb{j}', {'node_type': 0, 'matter': 0, 'dim': 0, 'index': j}) for j in range(1, field_num + 1)
+                        ]
+                    )
+                    self.superpotential_graph.add_edges_from(
+                        [
+                            ('q', f'qb{j}') for j in range(1, field_num + 1)
+                        ]
+                    )
+                else:
+                    self.superpotential_graph.add_node(field, node_type=1, matter=i + 1, dim=rep_dims[i], index=0)
+                    self.superpotential_graph.add_nodes_from(
+                        [
+                            (f'{field}{j}', {'node_type': 0, 'matter': 0, 'dim': 0, 'index': j}) for j in range(1, field_num + 1)
+                        ]
+                    )
+                    self.superpotential_graph.add_edges_from(
+                        [
+                            (field, f'{field}{j}') for j in range(1, field_num + 1)
+                        ]
+                    )
 
         if M_num > 0:
-            self.superpotential_graph.add_node('M', node_type=2, matter=1, index=0)
+            self.superpotential_graph.add_node('M', node_type=2, matter=1, dim=1, index=0)
             self.superpotential_graph.add_nodes_from(
                 [
-                    (f'M{i}', {'node_type': 0, 'matter': 0, 'index': i}) for i in range(1, M_num + 1)
+                    (f'M{i}', {'node_type': 0, 'matter': 0, 'dim': 0, 'index': i}) for i in range(1, M_num + 1)
                 ]
             )
             self.superpotential_graph.add_edges_from(
@@ -371,10 +386,10 @@ class Superpotential:
             )
 
         if X_num > 0:
-            self.superpotential_graph.add_node('X', node_type=2, matter=2, index=0)
+            self.superpotential_graph.add_node('X', node_type=2, matter=2, dim=1, index=0)
             self.superpotential_graph.add_nodes_from(
                 [
-                    (f'X{i}', {'node_type': 0, 'matter': 0, 'index': i}) for i in range(1, X_num + 1)
+                    (f'X{i}', {'node_type': 0, 'matter': 0, 'dim': 0, 'index': i}) for i in range(1, X_num + 1)
                 ]
             )
             self.superpotential_graph.add_edges_from(
@@ -384,10 +399,10 @@ class Superpotential:
             )
 
         if term_num > 0:
-            self.superpotential_graph.add_node('Term', node_type=3, matter=0, index=0)
+            self.superpotential_graph.add_node('Term', node_type=3, matter=0, dim=0, index=0)
             self.superpotential_graph.add_nodes_from(
                 [
-                    (f'Term{i}', {'node_type': 0, 'matter': 0, 'index': 0}) for i in range(1, term_num + 1)
+                    (f'Term{i}', {'node_type': 0, 'matter': 0, 'dim': 0, 'index': 0}) for i in range(1, term_num + 1)
                 ]
             )
             self.superpotential_graph.add_edges_from(
@@ -442,14 +457,7 @@ class Superpotential:
     def get_superpotential_data(self) -> Data:
         """
         Gets the data of the superpotential by graph with node attribute
-        [node_type, matter, index].
+        [node_type, matter, dim].
         :return: PyG graph data of the superpotential graph.
         """
-        try:
-            return from_networkx(self.superpotential_graph, group_node_attrs=['node_type', 'matter', 'index'])
-        except ValueError as e:
-            print(self.theory)
-            print(self.superpotential)
-            print(list(self.dynkin_diagram.nodes(data=True)))
-            print(list(self.superpotential_graph.nodes(data=True)))
-            raise e
+        return from_networkx(self.superpotential_graph, group_node_attrs=['node_type', 'matter', 'dim'])
