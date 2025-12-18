@@ -81,7 +81,7 @@ class GraphInconsistencyClassifier(nn.Module):
             if i != len(self.conv_dynkin) - 1:
                 x_dynkin = self.norm_dynkin[i](x_dynkin, batch_dynkin)
                 x_dynkin = F.gelu(x_dynkin)
-                x_dynkin = F.dropout(x_dynkin, p=self.dropout, training=self.training)
+                # x_dynkin = F.dropout(x_dynkin, p=self.dropout, training=self.training)
         x_dynkin = pyg_nn.global_mean_pool(x_dynkin, batch_dynkin)
 
         for i in range(len(self.conv_w)):
@@ -89,7 +89,7 @@ class GraphInconsistencyClassifier(nn.Module):
             if i != len(self.conv_w) - 1:
                 x_w = self.norm_w[i](x_w, batch_w)
                 x_w = F.gelu(x_w)
-                x_w = F.dropout(x_w, p=self.dropout, training=self.training)
+                # x_w = F.dropout(x_w, p=self.dropout, training=self.training)
         x_w = pyg_nn.global_mean_pool(x_w, batch_w)
 
         x_total = torch.cat((x_dynkin, x_w), dim=1)
