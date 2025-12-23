@@ -147,7 +147,7 @@ model = GraphCentralChargeModel(dynkin_features, w_features,
 
 print(model)
 batch = next(iter(test_loader))
-print('Inconsistency classification model shape: ', model(
+print('Charge calculation model shape: ', model(
     batch.x_1.float().to(device), batch.x_2.float().to(device),
     batch.edge_index_1.to(device), batch.edge_index_2.to(device),
     batch.x_1_batch.to(device), batch.x_2_batch.to(device)
