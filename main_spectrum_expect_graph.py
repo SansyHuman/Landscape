@@ -171,12 +171,11 @@ print('Charge calculation model shape: ', model(
     batch.x_1_batch.to(device), batch.x_2_batch.to(device)
 ).shape)
 
-"""
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 best_loss = 1e10
 
 checkpoint = None
-checkpoint_file_name = f'./checkpoint_charge_calc_graph.tar'
+checkpoint_file_name = f'./checkpoint_spectrum_expect_{input_spectrum_num}_{output_spectrum_num}_graph.tar'
 if os.path.isfile(checkpoint_file_name):
     print('Checkpoint available. Loads checkpoint...')
     checkpoint = torch.load(checkpoint_file_name, map_location=device)
@@ -189,6 +188,7 @@ for epoch in range(epoch_num):
     for _, data in enumerate(train_loader):
         x_dynkin = data.x_1.float().to(device)
         x_w = data.x_2.float().to(device)
+        x_spectrum = data.x_spectrum.float().to(device)
         edge_index_dynkin = data.edge_index_1.to(device)
         edge_index_w = data.edge_index_2.to(device)
         batch_dynkin = data.x_1_batch.to(device)
@@ -196,7 +196,7 @@ for epoch in range(epoch_num):
         y = data.y.float().to(device)
 
         outputs = model(
-            x_dynkin, x_w,
+            x_dynkin, x_w, x_spectrum,
             edge_index_dynkin, edge_index_w,
             batch_dynkin, batch_w
         )
@@ -215,6 +215,7 @@ for epoch in range(epoch_num):
         for _, data in enumerate(test_loader):
             x_dynkin = data.x_1.float().to(device)
             x_w = data.x_2.float().to(device)
+            x_spectrum = data.x_spectrum.float().to(device)
             edge_index_dynkin = data.edge_index_1.to(device)
             edge_index_w = data.edge_index_2.to(device)
             batch_dynkin = data.x_1_batch.to(device)
@@ -222,7 +223,7 @@ for epoch in range(epoch_num):
             y = data.y.float().to(device)
 
             outputs = model(
-                x_dynkin, x_w,
+                x_dynkin, x_w, x_spectrum,
                 edge_index_dynkin, edge_index_w,
                 batch_dynkin, batch_w
             )
@@ -254,10 +255,12 @@ optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
 with torch.no_grad():
     error = np.array([])
+    error_spectrum = None
 
     for _, data in enumerate(final_loader):
         x_dynkin = data.x_1.float().to(device)
         x_w = data.x_2.float().to(device)
+        x_spectrum = data.x_spectrum.float().to(device)
         edge_index_dynkin = data.edge_index_1.to(device)
         edge_index_w = data.edge_index_2.to(device)
         batch_dynkin = data.x_1_batch.to(device)
@@ -265,36 +268,62 @@ with torch.no_grad():
         y_real = data.y.cpu().numpy()
 
         y_expect = model(
-            x_dynkin, x_w,
+            x_dynkin, x_w, x_spectrum,
             edge_index_dynkin, edge_index_w,
             batch_dynkin, batch_w
         ).cpu().numpy()
 
-        error = np.append(error, (np.abs((y_expect - y_real) / y_real) * 100).flatten())
+        error_raw = np.abs((y_expect - y_real) / y_real) * 100
+        error = np.append(error, error_raw.flatten())
+        error_spectrum = error_raw.transpose() if error_spectrum is None else np.hstack((error_spectrum, error_raw.transpose()))
 
     error_max = np.max(error)
     print(f'Maximum error: {error_max}')
 
     json_data = dict()
-    sorted_errors = np.sort(error, axis=None)
-    json_data['min_error'] = sorted_errors[0]
-    json_data['max_error'] = sorted_errors[-1]
-    json_data['avg_error'] = np.mean(sorted_errors)
-    json_data['median_error'] = median_sorted(sorted_errors)
-    json_data['stdev_error'] = np.std(sorted_errors)
+    for i in range(error_spectrum.shape[0]):
+        spectrum_data = dict()
+        sorted_errors = np.sort(error_spectrum[i], axis=None)
+        spectrum_data['min_error'] = float(sorted_errors[0])
+        spectrum_data['max_error'] = float(sorted_errors[-1])
+        spectrum_data['avg_error'] = float(np.mean(sorted_errors))
+        spectrum_data['median_error'] = float(median_sorted(sorted_errors))
+        spectrum_data['stdev_error'] = float(np.std(sorted_errors))
+        json_data[f'spectrum_{i + 1}'] = spectrum_data
 
-    with open(f'./data/{filename}_charge_calc_graph.json', 'w') as json_file:
+    total_data = dict()
+    sorted_errors = np.sort(error, axis=None)
+    total_data['min_error'] = float(sorted_errors[0])
+    total_data['max_error'] = float(sorted_errors[-1])
+    total_data['avg_error'] = float(np.mean(sorted_errors))
+    total_data['median_error'] = float(median_sorted(sorted_errors))
+    total_data['stdev_error'] = float(np.std(sorted_errors))
+    json_data['total'] = total_data
+
+    with open(f'./data/{filename}_spectrum_expect_{input_spectrum_num}_{output_spectrum_num}_graph.json', 'w') as json_file:
         json.dump(json_data, json_file, indent=4)
 
     plt.style.use('default')
     plt.rcParams['figure.figsize'] = (16, 12)
     plt.rcParams['font.size'] = 15
 
-    plt.hist(error, bins=math.ceil(error_max))
-    plt.yscale('log')
-    plt.xlabel('Error (%)')
-    plt.ylabel('Number of errors')
-    plt.title('Graph charge calculation errors')
-    plt.savefig(f'./data/{filename}_charge_calc_graph.png')
+    fig, ax = plt.subplots(nrows=1, ncols=2, squeeze=True)
+
+    fig.suptitle(f'Spectrum expectation from {input_spectrum_num} to {output_spectrum_num}')
+
+    ax[0].hist(error, bins=math.ceil(error_max))
+    ax[0].set_yscale('log')
+    ax[0].set_xlabel('Error (%)')
+    ax[0].set_ylabel('Number of errors')
+    ax[0].set_title('Graph spectrum expectation errors')
+
+    ax[1].plot(
+        [i + 1 for i in range(error_spectrum.shape[0])],
+        [json_data[f'spectrum_{i + 1}']['avg_error'] for i in range(error_spectrum.shape[0])]
+    )
+    ax[1].set_xlabel('Spectrum')
+    ax[1].set_ylabel('Average error (%)')
+    ax[1].set_title('Average errors by spectrum')
+
+    plt.savefig(f'./data/{filename}_spectrum_expect_{input_spectrum_num}_{output_spectrum_num}_graph.png')
     plt.show()
-"""
