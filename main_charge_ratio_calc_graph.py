@@ -16,81 +16,6 @@ import torch.nn.functional as F
 import torch_geometric.nn as pyg_nn
 from torch_geometric.loader import DataLoader
 
-
-os.makedirs('./data', exist_ok=True)
-csv.field_size_limit(np.iinfo(np.int32).max)
-
-filename = input("Enter file name to load: ")
-epoch_num = int(input("Enter number of epochs: "))
-
-data = None
-with open(filename) as csvfile:
-    reader = csv.reader(csvfile)
-    data = list(reader)
-
-field_content_index, w_index, a_index, c_index = -1, -1, -1, -1
-for i in range(len(data[0])):
-    if data[0][i] == "Name":
-        field_content_index = i
-    elif data[0][i] == "Superpotentials":
-        w_index = i
-    elif data[0][i] == "CentralChargeA":
-        a_index = i
-    elif data[0][i] == "CentralChargeC":
-        c_index = i
-
-dataset = []
-w_obj = Superpotential()
-
-prev_theory = None
-for i in range(1, len(data)):
-    theory = serialize_theory_name(data[i][field_content_index])
-    if theory[0] == 0:
-        continue
-
-    if prev_theory != theory:
-        prev_theory = theory
-        w_obj.set_theory(theory)
-    w_obj.set_superpotential(data[i][w_index])
-
-    dynkin_diagram = w_obj.get_theory_data()
-    superpotential_graph = w_obj.get_superpotential_data()
-    a = float(data[i][a_index])
-    c = float(data[i][c_index])
-
-    w_data = PairData(x_1=dynkin_diagram.x, x_2=superpotential_graph.x,
-                    edge_index_1=dynkin_diagram.edge_index, edge_index_2=superpotential_graph.edge_index,
-                    y=torch.tensor([[a / c]]))
-    dataset.append(w_data)
-
-random.shuffle(dataset)
-num_data = len(dataset)
-print(f'Number of data: {num_data}')
-
-train_ratio = float(input("Enter the ratio of training data: "))
-if train_ratio > 1:
-    train_ratio = 1
-elif train_ratio < 0:
-    train_ratio = 0
-
-train_num = round(num_data * train_ratio)
-train_dataset = dataset[:train_num]
-test_dataset = dataset[train_num:]
-
-print(f'Number of training data: {len(train_dataset)}')
-print(f'Number of testing data: {len(test_dataset)}')
-
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True, follow_batch=['x_1', 'x_2'])
-test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False, follow_batch=['x_1', 'x_2'])
-
-for step, data in enumerate(train_loader):
-    print(f'Step {step + 1}:')
-    print('========')
-    print(f'Number of graphs in the current batch: {data.num_graphs}')
-    print(data)
-    print()
-
-
 class GraphCentralChargeModel(nn.Module):
     def __init__(self, dynkin_features: int, w_features: int, dynkin_hidden_channels: list[int], w_hidden_channels: list[int],
                  charge_expect_linear: list[int]):
@@ -133,80 +58,128 @@ class GraphCentralChargeModel(nn.Module):
                 x_w = F.gelu(x_w)
         x_w = pyg_nn.global_mean_pool(x_w, batch_w)
 
-        x_total = torch.cat((x_dynkin, x_w), dim=1)
-        x_total = self.lin(x_total)
+        x_hidden = torch.cat((x_dynkin, x_w), dim=1)
+        y = self.lin(x_hidden)
 
-        return x_total
+        return y, x_hidden
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f'Avaliable device: {device}')
-criterion = nn.MSELoss()
+if __name__ == '__main__':
+    os.makedirs('./data', exist_ok=True)
+    csv.field_size_limit(np.iinfo(np.int32).max)
 
-dynkin_features=dataset[0].x_1.shape[1]
-w_features=dataset[0].x_2.shape[1]
-total_features = dynkin_features + w_features
+    filename = input("Enter file name to load: ")
+    epoch_num = int(input("Enter number of epochs: "))
 
-model = GraphCentralChargeModel(dynkin_features, w_features,
-                                [dynkin_features * 2, dynkin_features * 2, dynkin_features * 2],
-                                [w_features * 2, w_features * 3, w_features * 3, w_features * 2],
-                                [
-                                    total_features * 2,
-                                    total_features * 8,
-                                    total_features * 16,
-                                    total_features * 16,
-                                    total_features * 4,
-                                    total_features * 4
-                                ]).to(device)
+    data = None
+    with open(filename) as csvfile:
+        reader = csv.reader(csvfile)
+        data = list(reader)
 
-print(model)
-batch = next(iter(test_loader))
-print('Charge ratio calculation model shape: ', model(
-    batch.x_1.float().to(device), batch.x_2.float().to(device),
-    batch.edge_index_1.to(device), batch.edge_index_2.to(device),
-    batch.x_1_batch.to(device), batch.x_2_batch.to(device)
-).shape)
+    field_content_index, w_index, a_index, c_index = -1, -1, -1, -1
+    for i in range(len(data[0])):
+        if data[0][i] == "Name":
+            field_content_index = i
+        elif data[0][i] == "Superpotentials":
+            w_index = i
+        elif data[0][i] == "CentralChargeA":
+            a_index = i
+        elif data[0][i] == "CentralChargeC":
+            c_index = i
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-best_loss = 1e10
+    dataset = []
+    w_obj = Superpotential()
 
-checkpoint = None
-checkpoint_file_name = f'./checkpoint_charge_ratio_calc_graph.tar'
-if os.path.isfile(checkpoint_file_name):
-    print('Checkpoint available. Loads checkpoint...')
-    checkpoint = torch.load(checkpoint_file_name, map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    best_loss = checkpoint['best_loss']
+    prev_theory = None
+    for i in range(1, len(data)):
+        theory = serialize_theory_name(data[i][field_content_index])
+        if theory[0] == 0:
+            continue
 
-for epoch in range(epoch_num):
-    model.train()
-    for _, data in enumerate(train_loader):
-        x_dynkin = data.x_1.float().to(device)
-        x_w = data.x_2.float().to(device)
-        edge_index_dynkin = data.edge_index_1.to(device)
-        edge_index_w = data.edge_index_2.to(device)
-        batch_dynkin = data.x_1_batch.to(device)
-        batch_w = data.x_2_batch.to(device)
-        y = data.y.float().to(device)
+        if prev_theory != theory:
+            prev_theory = theory
+            w_obj.set_theory(theory)
+        w_obj.set_superpotential(data[i][w_index])
 
-        outputs = model(
-            x_dynkin, x_w,
-            edge_index_dynkin, edge_index_w,
-            batch_dynkin, batch_w
-        )
-        loss = criterion(outputs, y)
+        dynkin_diagram = w_obj.get_theory_data()
+        superpotential_graph = w_obj.get_superpotential_data()
+        a = float(data[i][a_index])
+        c = float(data[i][c_index])
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        w_data = PairData(x_1=dynkin_diagram.x, x_2=superpotential_graph.x,
+                        edge_index_1=dynkin_diagram.edge_index, edge_index_2=superpotential_graph.edge_index,
+                        y=torch.tensor([[a / c]]))
+        dataset.append(w_data)
 
-    model.eval()
-    test_loss = 0.0
-    error = 0.0
-    test_cnt = 0
+    random.shuffle(dataset)
+    num_data = len(dataset)
+    print(f'Number of data: {num_data}')
 
-    with torch.no_grad():
-        for _, data in enumerate(test_loader):
+    train_ratio = float(input("Enter the ratio of training data: "))
+    if train_ratio > 1:
+        train_ratio = 1
+    elif train_ratio < 0:
+        train_ratio = 0
+
+    train_num = round(num_data * train_ratio)
+    train_dataset = dataset[:train_num]
+    test_dataset = dataset[train_num:]
+
+    print(f'Number of training data: {len(train_dataset)}')
+    print(f'Number of testing data: {len(test_dataset)}')
+
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True, follow_batch=['x_1', 'x_2'])
+    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False, follow_batch=['x_1', 'x_2'])
+
+    for step, data in enumerate(train_loader):
+        print(f'Step {step + 1}:')
+        print('========')
+        print(f'Number of graphs in the current batch: {data.num_graphs}')
+        print(data)
+        print()
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Avaliable device: {device}')
+    criterion = nn.MSELoss()
+
+    dynkin_features=dataset[0].x_1.shape[1]
+    w_features=dataset[0].x_2.shape[1]
+    total_features = dynkin_features + w_features
+
+    model = GraphCentralChargeModel(dynkin_features, w_features,
+                                    [dynkin_features * 2, dynkin_features * 2, dynkin_features * 2],
+                                    [w_features * 2, w_features * 3, w_features * 3, w_features * 2],
+                                    [
+                                        total_features * 2,
+                                        total_features * 8,
+                                        total_features * 16,
+                                        total_features * 16,
+                                        total_features * 4,
+                                        total_features * 4
+                                    ]).to(device)
+
+    print(model)
+    batch = next(iter(test_loader))
+    print('Charge ratio calculation model shape: ', model(
+        batch.x_1.float().to(device), batch.x_2.float().to(device),
+        batch.edge_index_1.to(device), batch.edge_index_2.to(device),
+        batch.x_1_batch.to(device), batch.x_2_batch.to(device)
+    )[0].shape)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    best_loss = 1e10
+
+    checkpoint = None
+    checkpoint_file_name = f'./checkpoint_charge_ratio_calc_graph.tar'
+    if os.path.isfile(checkpoint_file_name):
+        print('Checkpoint available. Loads checkpoint...')
+        checkpoint = torch.load(checkpoint_file_name, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        best_loss = checkpoint['best_loss']
+
+    for epoch in range(epoch_num):
+        model.train()
+        for _, data in enumerate(train_loader):
             x_dynkin = data.x_1.float().to(device)
             x_w = data.x_2.float().to(device)
             edge_index_dynkin = data.edge_index_1.to(device)
@@ -215,79 +188,106 @@ for epoch in range(epoch_num):
             batch_w = data.x_2_batch.to(device)
             y = data.y.float().to(device)
 
-            outputs = model(
+            outputs, _ = model(
                 x_dynkin, x_w,
                 edge_index_dynkin, edge_index_w,
                 batch_dynkin, batch_w
             )
             loss = criterion(outputs, y)
 
-            test_loss += loss.item()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-            outputs = outputs.cpu().numpy()
-            ac = y.cpu().numpy()
-            err = np.concatenate(np.abs((outputs - ac) / ac))
-            error += np.sum(err)
-            test_cnt += len(err)
+        model.eval()
+        test_loss = 0.0
+        error = 0.0
+        test_cnt = 0
 
-    print(f'epoch {epoch + 1} test loss: {test_loss / len(test_loader)} error: {error * 100 / test_cnt} %')
-    if test_loss < best_loss:
-        best_loss = test_loss
-        print('New best loss obtained. Saving model...')
-        torch.save({
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'best_loss': best_loss
-        }, checkpoint_file_name)
+        with torch.no_grad():
+            for _, data in enumerate(test_loader):
+                x_dynkin = data.x_1.float().to(device)
+                x_w = data.x_2.float().to(device)
+                edge_index_dynkin = data.edge_index_1.to(device)
+                edge_index_w = data.edge_index_2.to(device)
+                batch_dynkin = data.x_1_batch.to(device)
+                batch_w = data.x_2_batch.to(device)
+                y = data.y.float().to(device)
 
-final_loader = DataLoader(dataset, batch_size=256, shuffle=False, follow_batch=['x_1', 'x_2'])
+                outputs, _ = model(
+                    x_dynkin, x_w,
+                    edge_index_dynkin, edge_index_w,
+                    batch_dynkin, batch_w
+                )
+                loss = criterion(outputs, y)
 
-checkpoint = torch.load(checkpoint_file_name, map_location=device)
-model.load_state_dict(checkpoint['model_state_dict'])
-optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                test_loss += loss.item()
 
-with torch.no_grad():
-    error = np.array([])
+                outputs = outputs.cpu().numpy()
+                ac = y.cpu().numpy()
+                err = np.concatenate(np.abs((outputs - ac) / ac))
+                error += np.sum(err)
+                test_cnt += len(err)
 
-    for _, data in enumerate(final_loader):
-        x_dynkin = data.x_1.float().to(device)
-        x_w = data.x_2.float().to(device)
-        edge_index_dynkin = data.edge_index_1.to(device)
-        edge_index_w = data.edge_index_2.to(device)
-        batch_dynkin = data.x_1_batch.to(device)
-        batch_w = data.x_2_batch.to(device)
-        y_real = data.y.cpu().numpy()
+        print(f'epoch {epoch + 1} test loss: {test_loss / len(test_loader)} error: {error * 100 / test_cnt} %')
+        if test_loss < best_loss:
+            best_loss = test_loss
+            print('New best loss obtained. Saving model...')
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'best_loss': best_loss
+            }, checkpoint_file_name)
 
-        y_expect = model(
-            x_dynkin, x_w,
-            edge_index_dynkin, edge_index_w,
-            batch_dynkin, batch_w
-        ).cpu().numpy()
+    final_loader = DataLoader(dataset, batch_size=256, shuffle=False, follow_batch=['x_1', 'x_2'])
 
-        error = np.append(error, (np.abs((y_expect - y_real) / y_real) * 100).flatten())
+    checkpoint = torch.load(checkpoint_file_name, map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    error_max = np.max(error)
-    print(f'Maximum error: {error_max}')
+    with torch.no_grad():
+        error = np.array([])
 
-    json_data = dict()
-    sorted_errors = np.sort(error, axis=None)
-    json_data['min_error'] = sorted_errors[0]
-    json_data['max_error'] = sorted_errors[-1]
-    json_data['avg_error'] = np.mean(sorted_errors)
-    json_data['median_error'] = median_sorted(sorted_errors)
-    json_data['stdev_error'] = np.std(sorted_errors)
+        for _, data in enumerate(final_loader):
+            x_dynkin = data.x_1.float().to(device)
+            x_w = data.x_2.float().to(device)
+            edge_index_dynkin = data.edge_index_1.to(device)
+            edge_index_w = data.edge_index_2.to(device)
+            batch_dynkin = data.x_1_batch.to(device)
+            batch_w = data.x_2_batch.to(device)
+            y_real = data.y.cpu().numpy()
 
-    with open(f'./data/{filename}_charge_ratio_calc_graph.json', 'w') as json_file:
-        json.dump(json_data, json_file, indent=4)
+            y_expect, _ = model(
+                x_dynkin, x_w,
+                edge_index_dynkin, edge_index_w,
+                batch_dynkin, batch_w
+            )
+            y_expect = y_expect.cpu().numpy()
 
-    plt.style.use('default')
-    plt.rcParams['figure.figsize'] = (16, 12)
-    plt.rcParams['font.size'] = 15
+            error = np.append(error, (np.abs((y_expect - y_real) / y_real) * 100).flatten())
 
-    plt.hist(error, bins=math.ceil(error_max))
-    plt.yscale('log')
-    plt.xlabel('Error (%)')
-    plt.ylabel('Number of errors')
-    plt.title('Graph charge ratio calculation errors')
-    plt.savefig(f'./data/{filename}_charge_ratio_calc_graph.png')
-    plt.show()
+        error_max = np.max(error)
+        print(f'Maximum error: {error_max}')
+
+        json_data = dict()
+        sorted_errors = np.sort(error, axis=None)
+        json_data['min_error'] = sorted_errors[0]
+        json_data['max_error'] = sorted_errors[-1]
+        json_data['avg_error'] = np.mean(sorted_errors)
+        json_data['median_error'] = median_sorted(sorted_errors)
+        json_data['stdev_error'] = np.std(sorted_errors)
+
+        with open(f'./data/{filename}_charge_ratio_calc_graph.json', 'w') as json_file:
+            json.dump(json_data, json_file, indent=4)
+
+        plt.style.use('default')
+        plt.rcParams['figure.figsize'] = (16, 12)
+        plt.rcParams['font.size'] = 15
+
+        plt.hist(error, bins=math.ceil(error_max))
+        plt.yscale('log')
+        plt.xlabel('Error (%)')
+        plt.ylabel('Number of errors')
+        plt.title('Graph charge ratio calculation errors')
+        plt.savefig(f'./data/{filename}_charge_ratio_calc_graph.png')
+        plt.show()
