@@ -5,7 +5,7 @@ import random
 
 from common.inconsistents_parser import serialize_theory_name
 from common.superpotential_parser import Superpotential
-from common.utils import prime_numbers, PairData, median_sorted
+from common.utils import prime_numbers, PairData, median_sorted, FullyConnectedNetwork
 import math
 
 import matplotlib.pyplot as plt
@@ -92,7 +92,8 @@ for step, data in enumerate(train_loader):
 
 
 class GraphCentralChargeModel(nn.Module):
-    def __init__(self, dynkin_features: int, w_features: int, dynkin_hidden_channels: list[int], w_hidden_channels: list[int]):
+    def __init__(self, dynkin_features: int, w_features: int, dynkin_hidden_channels: list[int], w_hidden_channels: list[int],
+                 charge_expect_linear: list[int]):
         super(GraphCentralChargeModel, self).__init__()
 
         assert len(dynkin_hidden_channels) > 0 and len(w_hidden_channels) > 0
@@ -112,7 +113,10 @@ class GraphCentralChargeModel(nn.Module):
             self.conv_w.append(pyg_nn.GraphConv(w_hidden_channels[i], w_hidden_channels[i + 1]))
             self.norm_w.append(pyg_nn.norm.GraphNorm(w_hidden_channels[i]))
 
-        self.lin = nn.Linear(dynkin_hidden_channels[-1] + w_hidden_channels[-1], 2)
+        self.lin = FullyConnectedNetwork(
+            dynkin_hidden_channels[-1] + w_hidden_channels[-1], 2,
+            *list(zip(charge_expect_linear, [nn.GELU() for _ in range(len(charge_expect_linear))]))
+        )
 
     def forward(self, x_dynkin, x_w, edge_index_dynkin, edge_index_w, batch_dynkin, batch_w):
         for i in range(len(self.conv_dynkin)):
@@ -140,10 +144,19 @@ criterion = nn.MSELoss()
 
 dynkin_features=dataset[0].x_1.shape[1]
 w_features=dataset[0].x_2.shape[1]
+total_features = dynkin_features + w_features
 
 model = GraphCentralChargeModel(dynkin_features, w_features,
                                 [dynkin_features * 2, dynkin_features * 2, dynkin_features * 2],
-                                [w_features * 2, w_features * 3, w_features * 3, w_features * 2]).to(device)
+                                [w_features * 2, w_features * 3, w_features * 3, w_features * 2],
+                                [
+                                    total_features * 2,
+                                    total_features * 8,
+                                    total_features * 16,
+                                    total_features * 16,
+                                    total_features * 4,
+                                    total_features * 4
+                                ]).to(device)
 
 print(model)
 batch = next(iter(test_loader))
@@ -235,6 +248,7 @@ optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
 with torch.no_grad():
     error = np.array([])
+    error_charge = None
 
     for _, data in enumerate(final_loader):
         x_dynkin = data.x_1.float().to(device)
@@ -251,18 +265,41 @@ with torch.no_grad():
             batch_dynkin, batch_w
         ).cpu().numpy()
 
-        error = np.append(error, (np.abs((y_expect - y_real) / y_real) * 100).flatten())
+        error_raw = np.abs((y_expect - y_real) / y_real) * 100
+        error = np.append(error, error_raw.flatten())
+        error_charge = error_raw.transpose() if error_charge is None else np.hstack((error_charge, error_raw.transpose()))
 
     error_max = np.max(error)
     print(f'Maximum error: {error_max}')
 
     json_data = dict()
+
+    a_data = dict()
+    sorted_errors = np.sort(error_charge[0], axis=None)
+    a_data['min_error'] = float(sorted_errors[0])
+    a_data['max_error'] = float(sorted_errors[-1])
+    a_data['avg_error'] = float(np.mean(sorted_errors))
+    a_data['median_error'] = float(median_sorted(sorted_errors))
+    a_data['stdev_error'] = float(np.std(sorted_errors))
+    json_data['a'] = a_data
+
+    c_data = dict()
+    sorted_errors = np.sort(error_charge[1], axis=None)
+    c_data['min_error'] = float(sorted_errors[0])
+    c_data['max_error'] = float(sorted_errors[-1])
+    c_data['avg_error'] = float(np.mean(sorted_errors))
+    c_data['median_error'] = float(median_sorted(sorted_errors))
+    c_data['stdev_error'] = float(np.std(sorted_errors))
+    json_data['c'] = c_data
+
+    total_data = dict()
     sorted_errors = np.sort(error, axis=None)
-    json_data['min_error'] = sorted_errors[0]
-    json_data['max_error'] = sorted_errors[-1]
-    json_data['avg_error'] = np.mean(sorted_errors)
-    json_data['median_error'] = median_sorted(sorted_errors)
-    json_data['stdev_error'] = np.std(sorted_errors)
+    total_data['min_error'] = sorted_errors[0]
+    total_data['max_error'] = sorted_errors[-1]
+    total_data['avg_error'] = np.mean(sorted_errors)
+    total_data['median_error'] = median_sorted(sorted_errors)
+    total_data['stdev_error'] = np.std(sorted_errors)
+    json_data['total'] = total_data
 
     with open(f'./data/{filename}_charge_calc_graph.json', 'w') as json_file:
         json.dump(json_data, json_file, indent=4)
@@ -271,10 +308,20 @@ with torch.no_grad():
     plt.rcParams['figure.figsize'] = (16, 12)
     plt.rcParams['font.size'] = 15
 
-    plt.hist(error, bins=math.ceil(error_max))
-    plt.yscale('log')
-    plt.xlabel('Error (%)')
-    plt.ylabel('Number of errors')
-    plt.title('Graph charge calculation errors')
+    fig, ax = plt.subplots(nrows=1, ncols=2, squeeze=True)
+
+    fig.suptitle('Graph charge calculation errors')
+
+    ax[0].hist(error, bins=math.ceil(error_max))
+    ax[0].set_yscale('log')
+    ax[0].set_xlabel('Error (%)')
+    ax[0].set_ylabel('Number of errors')
+    ax[0].set_title('Graph charge calculation error distribution')
+
+    ax[1].bar(['a', 'c'], [a_data['avg_error'], c_data['avg_error']])
+    ax[1].set_xlabel('Error (%)')
+    ax[1].set_ylabel('Central charge')
+    ax[1].set_title('Average error or a and c charges')
+
     plt.savefig(f'./data/{filename}_charge_calc_graph.png')
     plt.show()
