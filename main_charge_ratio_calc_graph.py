@@ -5,7 +5,7 @@ import random
 
 from common.inconsistents_parser import serialize_theory_name
 from common.superpotential_parser import Superpotential
-from common.utils import prime_numbers, PairData, median_sorted
+from common.utils import prime_numbers, PairData, median_sorted, FullyConnectedNetwork
 import math
 
 import matplotlib.pyplot as plt
@@ -92,7 +92,8 @@ for step, data in enumerate(train_loader):
 
 
 class GraphCentralChargeModel(nn.Module):
-    def __init__(self, dynkin_features: int, w_features: int, dynkin_hidden_channels: list[int], w_hidden_channels: list[int]):
+    def __init__(self, dynkin_features: int, w_features: int, dynkin_hidden_channels: list[int], w_hidden_channels: list[int],
+                 charge_expect_linear: list[int]):
         super(GraphCentralChargeModel, self).__init__()
 
         assert len(dynkin_hidden_channels) > 0 and len(w_hidden_channels) > 0
@@ -112,7 +113,10 @@ class GraphCentralChargeModel(nn.Module):
             self.conv_w.append(pyg_nn.GraphConv(w_hidden_channels[i], w_hidden_channels[i + 1]))
             self.norm_w.append(pyg_nn.norm.GraphNorm(w_hidden_channels[i]))
 
-        self.lin = nn.Linear(dynkin_hidden_channels[-1] + w_hidden_channels[-1], 1)
+        self.lin = FullyConnectedNetwork(
+            dynkin_hidden_channels[-1] + w_hidden_channels[-1], 1,
+            *list(zip(charge_expect_linear, [nn.GELU() for _ in range(len(charge_expect_linear))]))
+        )
 
     def forward(self, x_dynkin, x_w, edge_index_dynkin, edge_index_w, batch_dynkin, batch_w):
         for i in range(len(self.conv_dynkin)):
@@ -140,10 +144,19 @@ criterion = nn.MSELoss()
 
 dynkin_features=dataset[0].x_1.shape[1]
 w_features=dataset[0].x_2.shape[1]
+total_features = dynkin_features + w_features
 
 model = GraphCentralChargeModel(dynkin_features, w_features,
                                 [dynkin_features * 2, dynkin_features * 2, dynkin_features * 2],
-                                [w_features * 2, w_features * 3, w_features * 3, w_features * 2]).to(device)
+                                [w_features * 2, w_features * 3, w_features * 3, w_features * 2],
+                                [
+                                    total_features * 2,
+                                    total_features * 8,
+                                    total_features * 16,
+                                    total_features * 16,
+                                    total_features * 4,
+                                    total_features * 4
+                                ]).to(device)
 
 print(model)
 batch = next(iter(test_loader))
