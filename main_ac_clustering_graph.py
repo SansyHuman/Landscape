@@ -41,12 +41,15 @@ for i in range(len(data[0])):
 
 dataset = []
 ac_set = []
+theory_index = []
+theory_name_index = dict()
 
 w_obj = Superpotential()
 
 prev_theory = None
 for i in range(1, len(data)):
-    theory = serialize_theory_name(data[i][field_content_index])
+    theory_name = data[i][field_content_index]
+    theory = serialize_theory_name(theory_name)
     if theory[0] == 0:
         continue
 
@@ -65,6 +68,10 @@ for i in range(1, len(data)):
                     y=torch.tensor([[a / c]]))
     dataset.append(w_data)
     ac_set.append([a, c])
+    if theory_name not in theory_name_index:
+        theory_name_index[theory_name] = len(theory_name_index)
+    theory_index.append(theory_name_index[theory_name])
+ac_set = np.array(ac_set)
 
 num_data = len(dataset)
 print(f'Number of data: {num_data}')
@@ -99,7 +106,7 @@ optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
 data_loader = DataLoader(dataset, batch_size=256, shuffle=False, follow_batch=['x_1', 'x_2'])
 
-features = None
+features: np.ndarray = None
 with torch.no_grad():
     for _, data in enumerate(data_loader):
         x_dynkin = data.x_1.float().to(device)
@@ -116,22 +123,91 @@ with torch.no_grad():
         )
         feature = feature.cpu().numpy()
         features = feature if features is None else np.vstack([features, feature])
-    features = np.hstack((features, np.array(ac_set)))
+    # features = np.hstack((features, np.array(ac_set)))
 
-dbscan = DBSCAN(leaf_size=1000)
+dbscan = DBSCAN(leaf_size=30)
 dbscan.fit(features)
-print(f'Number of clusters: {np.max(dbscan.labels_) + 1}')
-print(f'Cluster centers: {dbscan.components_}')
+n_cluster = np.max(dbscan.labels_) + 1
+print(f'Number of clusters: {n_cluster}')
+
+n_feature = dbscan.components_.shape[1]
+
+clustered_data = [[[] for _ in range(n_feature + 2)] for _ in range(n_cluster)] # first two are a and c charge and rests are hidden layer values
+theories_per_cluster = [[0 for _ in range(len(theory_name_index))] for _ in range(n_cluster)]
+
+theory_index_name = dict()
+for theory_name, index in theory_name_index.items():
+    theory_index_name[index] = theory_name
+feature_name = ['Data', 'a', 'c'] + [f'hidden {i}' for i in range(n_feature)]
+
+n_noise = 0
+
+for i in range(num_data):
+    cluster = dbscan.labels_[i]
+    if cluster < 0:
+        n_noise += 1
+        continue
+
+    clustered_data[cluster][0].append(ac_set[i][0])
+    clustered_data[cluster][1].append(ac_set[i][1])
+    for j in range(n_feature):
+        clustered_data[cluster][2 + j].append(features[i, j])
+
+    theories_per_cluster[cluster][theory_index[i]] += 1
+
+clustered_data_stats = [[] for _ in range(n_cluster)]
+for cluster in range(n_cluster):
+    for j in range(n_feature):
+        clustered_data[cluster][j].sort()
+
+    cluster_stat = {'Data': 'min'}
+    cluster_stat.update({feature_name[j + 1]: f'{clustered_data[cluster][j][0]}' if len(clustered_data[cluster][j]) > 0 else 0 for j in range(n_feature + 2)})
+    clustered_data_stats[cluster].append(cluster_stat)
+
+    cluster_stat = {'Data': 'max'}
+    cluster_stat.update({feature_name[j + 1]: f'{clustered_data[cluster][j][-1]}' if len(clustered_data[cluster][j]) > 0 else 0 for j in range(n_feature + 2)})
+    clustered_data_stats[cluster].append(cluster_stat)
+
+    cluster_stat = {'Data': 'average'}
+    cluster_stat.update({feature_name[j + 1]: f'{np.mean(clustered_data[cluster][j])}' if len(clustered_data[cluster][j]) > 0 else 0 for j in range(n_feature + 2)})
+    clustered_data_stats[cluster].append(cluster_stat)
+
+    cluster_stat = {'Data': 'median'}
+    cluster_stat.update({feature_name[j + 1]: f'{median_sorted(clustered_data[cluster][j])}' if len(clustered_data[cluster][j]) > 0 else 0 for j in range(n_feature + 2)})
+    clustered_data_stats[cluster].append(cluster_stat)
+
+with open(f'./data/{filename}_ac_clustering_graph.csv', 'w', newline='') as csv_file:
+    csv_file.write('Statistics per cluster\n')
+    for cluster in range(n_cluster):
+        csv_file.write(f'Cluster {cluster + 1}\n')
+        writer = csv.DictWriter(csv_file, fieldnames=feature_name)
+
+        writer.writeheader()
+        writer.writerows(clustered_data_stats[cluster])
+        csv_file.write('\n')
+
+    csv_file.write('Theories per cluster\n')
+    writer = csv.writer(csv_file)
+    writer.writerow(['Cluster'] + [theory_index_name[i] for i in range(len(theory_name_index))])
+    for cluster in range(n_cluster):
+        writer.writerow([f'{cluster + 1}'] + theories_per_cluster[cluster])
+    csv_file.write('\n')
+
+    csv_file.write('Total data, Noises\n')
+    csv_file.write(f'{num_data}, {n_noise}\n')
 
 plt.style.use('default')
 plt.rcParams['figure.figsize'] = (16, 12)
 plt.rcParams['font.size'] = 15
 
 fig, ax = plt.subplots()
-ax.scatter(features[:, -2], features[:, -1], s=1, c=dbscan.labels_)
+ax.scatter(ac_set[:, 0], ac_set[:, 1], s=1, c=dbscan.labels_)
 ax.set_xlabel('a')
 ax.set_ylabel('c')
+ax.set_xscale('log')
+ax.set_yscale('log')
 ax.tick_params(axis='both', rotation='auto')
-fig.suptitle('KMeans cluster by hidden layer of charge ratio model and central charges')
+fig.suptitle('KMeans cluster by hidden layer of charge ratio model')
+plt.savefig(f'./data/{filename}_ac_clustering_graph.png')
 
 plt.show()
