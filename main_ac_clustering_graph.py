@@ -134,6 +134,7 @@ n_feature = dbscan.components_.shape[1]
 
 clustered_data = [[[] for _ in range(n_feature + 2)] for _ in range(n_cluster)] # first two are a and c charge and rests are hidden layer values
 theories_per_cluster = [[0 for _ in range(len(theory_name_index))] for _ in range(n_cluster)]
+noise_theories = [0 for _ in range(len(theory_name_index))]
 
 theory_index_name = dict()
 for theory_name, index in theory_name_index.items():
@@ -146,6 +147,7 @@ for i in range(num_data):
     cluster = dbscan.labels_[i]
     if cluster < 0:
         n_noise += 1
+        noise_theories[theory_index[i]] += 1
         continue
 
     clustered_data[cluster][0].append(ac_set[i][0])
@@ -191,6 +193,7 @@ with open(f'./data/{filename}_ac_clustering_graph.csv', 'w', newline='') as csv_
     writer.writerow(['Cluster'] + [theory_index_name[i] for i in range(len(theory_name_index))])
     for cluster in range(n_cluster):
         writer.writerow([f'{cluster + 1}'] + theories_per_cluster[cluster])
+    writer.writerow(['Noise'] + noise_theories)
     csv_file.write('\n')
 
     csv_file.write('Total data, Noises\n')
