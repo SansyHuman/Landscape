@@ -156,10 +156,18 @@ model = GraphSpectrumExpectModel(dynkin_features, w_features,
                                  input_spectrum_num, output_spectrum_num,
                                  [
                                      input_spectrum_num * 4,
+                                     input_spectrum_num * 4,
+                                     input_spectrum_num * 8,
                                      input_spectrum_num * 8,
                                      input_spectrum_num * 16,
                                      input_spectrum_num * 16,
+                                     input_spectrum_num * 16,
+                                     input_spectrum_num * 16,
+                                     output_spectrum_num * 8,
+                                     output_spectrum_num * 8,
                                      output_spectrum_num * 4,
+                                     output_spectrum_num * 4,
+                                     output_spectrum_num * 2,
                                      output_spectrum_num * 2]
                                  ).to(device)
 
