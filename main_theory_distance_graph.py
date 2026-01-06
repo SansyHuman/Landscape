@@ -143,7 +143,7 @@ plt.rcParams['font.size'] = 15
 
 fig, ax = plt.subplots()
 ax.scatter(ac_distance, feature_distance, s=0.2)
-ax.plot(ac_distance, p(ac_distance), "r--")
+ax.plot([0, 300], p([0, 300]), "r--")
 ax.set_xlabel("Distance in ac space")
 ax.set_ylabel("Distance in hidden layer feature space")
 ax.tick_params(axis='both', rotation='auto')
