@@ -854,11 +854,110 @@ def clustering():
     plt.show()
 
 
+def theory_distance():
+    checkpoint_file_name = f'./checkpoint_charge_calc_v2.tar'
+    if not os.path.isfile(checkpoint_file_name):
+        print('The checkpoint file of charge calculation model does not exist.')
+
+    print('Choose the data to use.')
+    print('1. Unprocessed hidden layer')
+    print('2. Processed hidden layer')
+    feature_index = int(input('>>'))
+    assert feature_index == 1 or feature_index == 2
+
+    dataset = []
+
+    w_obj = Superpotential()
+    prev_theory = None
+    for i in range(len(w_set)):
+        theory = serialize_theory_name(theory_index_name[theory_index[i]])
+        if prev_theory != theory:
+            prev_theory = theory
+            w_obj.set_theory(theory)
+        w_obj.set_superpotential(w_set[i])
+
+        dynkin_diagram = w_obj.get_theory_data()
+        superpotential_graph = w_obj.get_superpotential_data()
+
+        w_data = PairData(x_1=dynkin_diagram.x, x_2=superpotential_graph.x,
+                          edge_index_1=dynkin_diagram.edge_index, edge_index_2=superpotential_graph.edge_index,
+                          y=torch.tensor([ac_set[i]]))
+        dataset.append(w_data)
+
+    num_data = len(dataset)
+    print(f'Number of data: {num_data}')
+
+    num_sample = int(input("Enter the number of samples to calculate distance: "))
+
+    optimizer = torch.optim.Adam(central_charge_model.parameters(), lr=1e-3)
+
+    checkpoint = torch.load(checkpoint_file_name, map_location=device)
+    central_charge_model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    data_loader = DataLoader(dataset, batch_size=256, shuffle=False, follow_batch=['x_1', 'x_2'])
+
+    features: np.ndarray = None
+    with torch.no_grad():
+        for _, data in enumerate(data_loader):
+            x_dynkin = data.x_1.float().to(device)
+            x_w = data.x_2.float().to(device)
+            edge_index_dynkin = data.edge_index_1.to(device)
+            edge_index_w = data.edge_index_2.to(device)
+            batch_dynkin = data.x_1_batch.to(device)
+            batch_w = data.x_2_batch.to(device)
+
+            feature = central_charge_model(
+                x_dynkin, x_w,
+                edge_index_dynkin, edge_index_w,
+                batch_dynkin, batch_w
+            )[feature_index]
+            feature = feature.cpu().numpy()
+            features = feature if features is None else np.vstack([features, feature])
+
+    sample_index = np.random.choice(num_data, num_sample, replace=False)
+    ac_distance = np.array([])
+    feature_distance = np.array([])
+
+    ac_array = np.array(ac_set)
+
+    for i in range(num_sample):
+        sample_ac = ac_array[sample_index[i]]
+        sample_feature = features[sample_index[i]]
+
+        ac_dist = np.linalg.norm(ac_array - sample_ac, axis=1)
+        feature_dist = np.linalg.norm(features - sample_feature, axis=1)
+
+        ac_distance = np.append(ac_distance, ac_dist)
+        feature_distance = np.append(feature_distance, feature_dist)
+
+    z = np.polyfit(ac_distance, feature_distance, 1)
+    p = np.poly1d(z)
+
+    plt.style.use('default')
+    plt.rcParams['figure.figsize'] = (16, 12)
+    plt.rcParams['font.size'] = 15
+
+    ac_dist_max = np.max(ac_distance)
+
+    fig, ax = plt.subplots()
+    ax.scatter(ac_distance, feature_distance, s=0.2)
+    ax.plot([0, ac_dist_max], p([0, ac_dist_max]), "r--")
+    ax.set_xlabel("Distance in ac space")
+    ax.set_ylabel("Distance in hidden layer feature space")
+    ax.tick_params(axis='both', rotation='auto')
+    fig.suptitle('Comparing the distance in AC space and Feature space')
+    plt.savefig(f'./data/{filename}_theory_distance_graph_v2_{'unprocessed' if feature_index == 1 else 'processed'}.png')
+
+    plt.show()
+
+
 while True:
     print('Program list...')
     print('1. Central charge calculation')
     print('2. Spectrum expectation')
     print('3. Clustering data with hidden layer values')
+    print('4. Calculating theory distance with hidden layer values')
     print('-1. Exit')
     program = int(input('>>'))
 
@@ -870,3 +969,5 @@ while True:
         expect_spectrum()
     elif program == 3:
         clustering()
+    elif program == 4:
+        theory_distance()
