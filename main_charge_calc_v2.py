@@ -16,6 +16,7 @@ import numpy as np
 import torch.nn.functional as F
 import torch_geometric.nn as pyg_nn
 from torch_geometric.loader import DataLoader
+from sklearn.cluster import DBSCAN
 
 
 os.makedirs('./data', exist_ok=True)
@@ -232,6 +233,7 @@ central_charge_model = GraphCentralChargeModel(
 ).to(device)
 print(f'Charge calculation model: {central_charge_model}')
 
+
 def calculate_central_charge():
     epoch_num = int(input('Enter the number of epochs: '))
 
@@ -241,9 +243,6 @@ def calculate_central_charge():
     prev_theory = None
     for i in range(len(w_set)):
         theory = serialize_theory_name(theory_index_name[theory_index[i]])
-        if theory[0] == 0:
-            continue
-
         if prev_theory != theory:
             prev_theory = theory
             w_obj.set_theory(theory)
@@ -458,9 +457,6 @@ def expect_spectrum():
     prev_theory = None
     for i in range(len(w_set)):
         theory = serialize_theory_name(theory_index_name[theory_index[i]])
-        if theory[0] == 0:
-            continue
-
         if prev_theory != theory:
             prev_theory = theory
             w_obj.set_theory(theory)
@@ -518,31 +514,30 @@ def expect_spectrum():
             w_total_num * 2,
             w_total_num * 4,
             w_total_num * 4,
-            w_total_num * 4,
-            w_total_num * 4,
             w_total_num * 16,
             w_total_num * 16,
             w_total_num * 32,
             w_total_num * 32,
-            w_total_num * 32,
-            w_total_num * 32,
             w_total_num * 8,
             w_total_num * 8,
-            w_total_num * 8,
-            w_total_num * 8,
-            w_total_num * 4,
-            w_total_num * 4,
             w_total_num * 2,
             w_features * 2
         ],
         [
+            total_features * 4,
+            total_features * 4,
+            total_features * 8,
+            total_features * 8,
+            total_features * 16,
+            total_features * 16,
+            total_features * 16,
+            total_features * 16,
+            total_features * 8,
+            total_features * 8,
+            total_features * 4,
+            total_features * 4,
             total_features * 2,
-            total_features * 2,
-            total_features * 4,
-            total_features * 4,
-            total_features * 4,
-            total_features,
-            total_features
+            total_features * 2
         ]
     ).to(device)
 
@@ -703,14 +698,167 @@ def expect_spectrum():
         ax[1].set_ylabel('Average error (%)')
         ax[1].set_title('Average errors by spectrum')
 
-        plt.savefig(f'./data/{filename}_spectrum_expect_{input_spectrum_num}_{output_spectrum_num}_graph.png')
+        plt.savefig(f'./data/{filename}_spectrum_expect_v2_{input_spectrum_num}_{output_spectrum_num}_graph.png')
         plt.show()
+
+
+def clustering():
+    checkpoint_file_name = f'./checkpoint_charge_calc_v2.tar'
+    if not os.path.isfile(checkpoint_file_name):
+        print('The checkpoint file of charge calculation model does not exist.')
+
+    print('Choose the data to use.')
+    print('1. Unprocessed hidden layer')
+    print('2. Processed hidden layer')
+    feature_index = int(input('>>'))
+    assert feature_index == 1 or feature_index == 2
+
+    dataset = []
+
+    w_obj = Superpotential()
+    prev_theory = None
+    for i in range(len(w_set)):
+        theory = serialize_theory_name(theory_index_name[theory_index[i]])
+        if prev_theory != theory:
+            prev_theory = theory
+            w_obj.set_theory(theory)
+        w_obj.set_superpotential(w_set[i])
+
+        dynkin_diagram = w_obj.get_theory_data()
+        superpotential_graph = w_obj.get_superpotential_data()
+
+        w_data = PairData(x_1=dynkin_diagram.x, x_2=superpotential_graph.x,
+                          edge_index_1=dynkin_diagram.edge_index, edge_index_2=superpotential_graph.edge_index,
+                          y=torch.tensor([ac_set[i]]))
+        dataset.append(w_data)
+
+    optimizer = torch.optim.Adam(central_charge_model.parameters(), lr=1e-3)
+
+    checkpoint = torch.load(checkpoint_file_name, map_location=device)
+    central_charge_model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    data_loader = DataLoader(dataset, batch_size=256, shuffle=False, follow_batch=['x_1', 'x_2'])
+
+    features: np.ndarray = None
+    with torch.no_grad():
+        for _, data in enumerate(data_loader):
+            x_dynkin = data.x_1.float().to(device)
+            x_w = data.x_2.float().to(device)
+            edge_index_dynkin = data.edge_index_1.to(device)
+            edge_index_w = data.edge_index_2.to(device)
+            batch_dynkin = data.x_1_batch.to(device)
+            batch_w = data.x_2_batch.to(device)
+
+            feature = central_charge_model(
+                x_dynkin, x_w,
+                edge_index_dynkin, edge_index_w,
+                batch_dynkin, batch_w
+            )[feature_index]
+            feature = feature.cpu().numpy()
+            features = feature if features is None else np.vstack([features, feature])
+
+    dbscan = DBSCAN(leaf_size=30)
+    dbscan.fit(features)
+    n_cluster = np.max(dbscan.labels_) + 1
+    print(f'Number of clusters: {n_cluster}')
+
+    n_feature = dbscan.components_.shape[1]
+
+    clustered_data = [[[] for _ in range(n_feature + 2)] for _ in
+                      range(n_cluster)]  # first two are a and c charge and rests are hidden layer values
+    theories_per_cluster = [[0 for _ in range(len(theory_name_index))] for _ in range(n_cluster)]
+    noise_theories = [0 for _ in range(len(theory_name_index))]
+
+    feature_name = ['Data', 'a', 'c'] + [f'hidden {i}' for i in range(n_feature)]
+    n_noise = 0
+
+    for i in range(num_data):
+        cluster = dbscan.labels_[i]
+        if cluster < 0:
+            n_noise += 1
+            noise_theories[theory_index[i]] += 1
+            continue
+
+        clustered_data[cluster][0].append(ac_set[i][0])
+        clustered_data[cluster][1].append(ac_set[i][1])
+        for j in range(n_feature):
+            clustered_data[cluster][2 + j].append(features[i, j])
+
+        theories_per_cluster[cluster][theory_index[i]] += 1
+
+    clustered_data_stats = [[] for _ in range(n_cluster)]
+    for cluster in range(n_cluster):
+        for j in range(n_feature):
+            clustered_data[cluster][j].sort()
+
+        cluster_stat = {'Data': 'min'}
+        cluster_stat.update(
+            {feature_name[j + 1]: f'{clustered_data[cluster][j][0]}' if len(clustered_data[cluster][j]) > 0 else 0 for j
+             in range(n_feature + 2)})
+        clustered_data_stats[cluster].append(cluster_stat)
+
+        cluster_stat = {'Data': 'max'}
+        cluster_stat.update(
+            {feature_name[j + 1]: f'{clustered_data[cluster][j][-1]}' if len(clustered_data[cluster][j]) > 0 else 0 for
+             j in range(n_feature + 2)})
+        clustered_data_stats[cluster].append(cluster_stat)
+
+        cluster_stat = {'Data': 'average'}
+        cluster_stat.update(
+            {feature_name[j + 1]: f'{np.mean(clustered_data[cluster][j])}' if len(clustered_data[cluster][j]) > 0 else 0
+             for j in range(n_feature + 2)})
+        clustered_data_stats[cluster].append(cluster_stat)
+
+        cluster_stat = {'Data': 'median'}
+        cluster_stat.update({feature_name[j + 1]: f'{median_sorted(clustered_data[cluster][j])}' if len(
+            clustered_data[cluster][j]) > 0 else 0 for j in range(n_feature + 2)})
+        clustered_data_stats[cluster].append(cluster_stat)
+
+    with open(f'./data/{filename}_ac_clustering_graph_v2_{'unprocessed' if feature_index == 1 else 'processed'}.csv', 'w', newline='') as csv_file:
+        csv_file.write('Statistics per cluster\n')
+        for cluster in range(n_cluster):
+            csv_file.write(f'Cluster {cluster + 1}\n')
+            writer = csv.DictWriter(csv_file, fieldnames=feature_name)
+
+            writer.writeheader()
+            writer.writerows(clustered_data_stats[cluster])
+            csv_file.write('\n')
+
+        csv_file.write('Theories per cluster\n')
+        writer = csv.writer(csv_file)
+        writer.writerow(['Cluster'] + [theory_index_name[i] for i in range(len(theory_name_index))])
+        for cluster in range(n_cluster):
+            writer.writerow([f'{cluster + 1}'] + theories_per_cluster[cluster])
+        writer.writerow(['Noise'] + noise_theories)
+        csv_file.write('\n')
+
+        csv_file.write('Total data, Noises\n')
+        csv_file.write(f'{num_data}, {n_noise}\n')
+
+    plt.style.use('default')
+    plt.rcParams['figure.figsize'] = (16, 12)
+    plt.rcParams['font.size'] = 15
+
+    ac_array = np.array(ac_set)
+    fig, ax = plt.subplots()
+    ax.scatter(ac_array[:, 0], ac_array[:, 1], s=1, c=dbscan.labels_)
+    ax.set_xlabel('a')
+    ax.set_ylabel('c')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.tick_params(axis='both', rotation='auto')
+    fig.suptitle('KMeans cluster by hidden layer of charge ratio model')
+    plt.savefig(f'./data/{filename}_ac_clustering_graph_v2_{'unprocessed' if feature_index == 1 else 'processed'}.png')
+
+    plt.show()
 
 
 while True:
     print('Program list...')
     print('1. Central charge calculation')
     print('2. Spectrum expectation')
+    print('3. Clustering data with hidden layer values')
     print('-1. Exit')
     program = int(input('>>'))
 
@@ -720,3 +868,5 @@ while True:
         calculate_central_charge()
     elif program == 2:
         expect_spectrum()
+    elif program == 3:
+        clustering()
