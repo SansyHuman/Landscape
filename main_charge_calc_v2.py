@@ -931,18 +931,23 @@ def theory_distance():
         ac_distance = np.append(ac_distance, ac_dist)
         feature_distance = np.append(feature_distance, feature_dist)
 
-    z = np.polyfit(ac_distance, feature_distance, 1)
+    log_ac = np.log(ac_distance, out=np.zeros_like(ac_distance), where=ac_distance > 0)
+    log_feature = np.log(feature_distance, out=np.zeros_like(feature_distance), where=feature_distance > 0)
+
+    z = np.polyfit(log_ac, log_feature, 1)
     p = np.poly1d(z)
 
     plt.style.use('default')
     plt.rcParams['figure.figsize'] = (16, 12)
     plt.rcParams['font.size'] = 15
 
-    ac_dist_max = np.max(ac_distance)
+    log_ac_max = np.max(log_ac)
+
+    fit_x = np.linspace(0, log_ac_max, 100)
 
     fig, ax = plt.subplots()
     ax.scatter(ac_distance, feature_distance, s=0.2)
-    ax.plot([0, ac_dist_max], p([0, ac_dist_max]), "r--")
+    ax.plot(np.exp(fit_x), np.exp(p(fit_x)), "r--")
     ax.set_xlabel("Distance in ac space")
     ax.set_ylabel("Distance in hidden layer feature space")
     ax.tick_params(axis='both', rotation='auto')
