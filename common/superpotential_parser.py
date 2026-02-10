@@ -4,6 +4,7 @@ from torch_geometric.data import Data
 from torch_geometric.utils import from_networkx
 
 import networkx as nx
+import numpy as np
 
 from common.inconsistents_parser import serialize_theory_name
 from common.utils import find_number
@@ -47,6 +48,71 @@ def serialize_w_term_list(w: list[str]):
         w_serial.append(term_data)
 
     return w_serial
+
+
+def get_ade_class(theory) -> tuple[int, int]:
+    ade_class = theory[0]
+    rank = theory[1]
+
+    # equivalent algebra check
+    if (ade_class == 2 and rank == 1) or (ade_class == 3 and rank == 1):
+        # A1=B1=C1
+        ade_class = 1
+        rank = 1
+    elif ade_class == 3 and rank == 2:
+        # B2=C2
+        ade_class = 2
+        rank = 2
+    elif ade_class == 4 and rank == 3:
+        # A3=D3
+        ade_class = 1
+        rank = 3
+
+    return ade_class, rank
+
+
+def is_same_gauge_group(theory1: str, theory2: str) -> bool:
+    t1 = serialize_theory_name(theory1)
+    t2 = serialize_theory_name(theory2)
+
+    ade1, rank1 = get_ade_class(t1)
+    ade2, rank2 = get_ade_class(t2)
+
+    return ade1 == ade2 and rank1 == rank2
+
+
+def is_equivalent_matter_contents(theory1: str, theory2: str) -> bool:
+    # includes the case where one matter contents contains other matter contents
+    if not is_same_gauge_group(theory1, theory2):
+        return False
+
+    t1 = serialize_theory_name(theory1)
+    t2 = serialize_theory_name(theory2)
+
+    dim1 = calculate_rep_dimensions(t1)
+    dim2 = calculate_rep_dimensions(t2)
+    max_dim = max(max(dim1), max(dim2))
+
+    matter1 = np.zeros(max_dim)
+    matter2 = np.zeros(max_dim)
+    for i in range(len(dim1)):
+        matter1[dim1[i] - 1] += t1[i + 2]
+        matter2[dim2[i] - 1] += t2[i + 2]
+    matter_diff = np.sign(matter1 - matter2)
+
+    equivalent = True
+    equiv_sign = 0
+
+    for i in range(len(matter_diff)):
+        if matter_diff[i] != 0:
+            if equiv_sign == 0:
+                equiv_sign = matter_diff[i]
+                continue
+            if equiv_sign != matter_diff[i]:
+                equivalent = False
+                break
+
+    return equivalent
 
 
 def build_dynkin_diagram(graph: nx.MultiGraph, ade_class: int, rank: int) -> None:
