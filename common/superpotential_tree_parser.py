@@ -76,11 +76,11 @@ def build_superpotential_tree(filename: str) -> tuple[str, SuperpotentialTreeNod
         id = int(data[i][id_index])
         w = data[i][w_index]
         w = w[1:-1].split(',')
-        w_terms = set()
+        w_terms = []
         for j in range(len(w)):
             w_term = w[j].strip()
             if w_term != '':
-                w_terms.add(w_term)
+                w_terms.append(w_term)
 
         a = float(data[i][a_index])
         c = float(data[i][c_index])
@@ -103,22 +103,19 @@ def build_superpotential_tree(filename: str) -> tuple[str, SuperpotentialTreeNod
     superpotential_tree = SuperpotentialTreeNode(theory_by_length[0][0])
 
     for theory in theory_by_length[1]:
-        term = theory.w.copy()
-        superpotential_tree.children.append(SuperpotentialTreeNode(theory, term.pop()))
+        superpotential_tree.children.append(SuperpotentialTreeNode(theory, theory.w[0]))
 
     for length in range(2, max_length + 1):
         for theory in theory_by_length[length]:
             parent_candidate = superpotential_tree
-            remaining_terms = theory.w.copy()
 
             found_candidate = False
-            for _ in range(length - 1):
+            for i in range(length - 1):
                 found_candidate = False
 
                 for candidate in parent_candidate.children:
-                    if candidate.added_term in remaining_terms:
+                    if candidate.added_term == theory.w[i]:
                         parent_candidate = candidate
-                        remaining_terms.remove(candidate.added_term)
                         found_candidate = True
                         break
 
@@ -127,6 +124,6 @@ def build_superpotential_tree(filename: str) -> tuple[str, SuperpotentialTreeNod
 
             if not found_candidate:
                 continue
-            parent_candidate.children.append(SuperpotentialTreeNode(theory, remaining_terms.pop()))
+            parent_candidate.children.append(SuperpotentialTreeNode(theory, theory.w[length - 1]))
 
     return theory_name, superpotential_tree

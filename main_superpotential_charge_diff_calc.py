@@ -15,7 +15,6 @@ import numpy as np
 filename = input('Enter file name that contains data of landscape from one gauge theory: ')
 theory_name, superpotential_tree = build_superpotential_tree(filename)
 
-
 def build_dataset(tree: SuperpotentialTreeNode, dw_dim_data: list[float], da_data: list[float], dc_data: list[float]):
     r_charges = tree.theory_data.r
     for child in tree.children:
@@ -24,18 +23,27 @@ def build_dataset(tree: SuperpotentialTreeNode, dw_dim_data: list[float], da_dat
 
         add_data = True
         for op, index, exp in dw:
+            '''
+            if op == 'M' and ('M' not in r_charges or index - 1 >= len(r_charges['M'])):
+                dw_dim += 2.0 / 3.0 * exp
+            elif op == 'X' and ('X' not in r_charges or index - 1 >= len(r_charges['X'])):
+                dw_dim += 2.0 / 3.0 * exp
+            el'''
+            # TODO: add contribution by free fields M and X to central charges
+
             if op not in r_charges or index - 1 >= len(r_charges[op]):
                 add_data = False
                 break
             else:
                 dw_dim += r_charges[op][index - 1] * exp
 
-        if dw_dim >= 2:
+        if add_data and dw_dim >= 2:
             add_data = False
 
         da = child.theory_data.a - tree.theory_data.a
         dc = child.theory_data.c - tree.theory_data.c
-        if da >= 0 or dc >= 0:
+
+        if add_data and da >= 0 or dc >= 0:
             add_data = False
 
         if add_data:
@@ -48,11 +56,86 @@ def build_dataset(tree: SuperpotentialTreeNode, dw_dim_data: list[float], da_dat
         build_dataset(child, dw_dim_data, da_data, dc_data)
 
 
+def get_most_children_node(tree: SuperpotentialTreeNode) -> SuperpotentialTreeNode:
+    most_children_node = None
+    most_children_num = -1
+
+    def most_children_internal(parent: SuperpotentialTreeNode):
+        nonlocal most_children_node
+        nonlocal most_children_num
+
+        children_num = len(parent.children)
+        if children_num > most_children_num:
+            print(children_num)
+            most_children_num = children_num
+            most_children_node = parent
+        for child in parent.children:
+            most_children_internal(child)
+
+    most_children_internal(tree)
+
+    print(most_children_num)
+    return most_children_node
+
+
+def build_dataset_most_children(tree: SuperpotentialTreeNode, dw_dim_data: list[float], da_data: list[float], dc_data: list[float]):
+    most_children_node = get_most_children_node(tree)
+    r_charges = most_children_node.theory_data.r
+
+    for child in most_children_node.children:
+        dw = serialize_w_term_list([child.added_term])[0]
+        dw_dim = 0
+
+        add_data = True
+        for op, index, exp in dw:
+            '''
+            if op == 'M' and ('M' not in r_charges or index - 1 >= len(r_charges['M'])):
+                dw_dim += 2.0 / 3.0 * exp
+            elif op == 'X' and ('X' not in r_charges or index - 1 >= len(r_charges['X'])):
+                dw_dim += 2.0 / 3.0 * exp
+            el'''
+            # TODO: add contribution by free fields M and X to central charges
+
+            if op not in r_charges or index - 1 >= len(r_charges[op]):
+                add_data = False
+                break
+            else:
+                dw_dim += r_charges[op][index - 1] * exp
+
+        if add_data and dw_dim >= 2:
+            add_data = False
+
+        da = child.theory_data.a - tree.theory_data.a
+        dc = child.theory_data.c - tree.theory_data.c
+
+        '''
+        if add_data and da >= 0 or dc >= 0:
+            add_data = False
+        '''
+
+        if add_data:
+            dw_dim *= 1.5
+
+            dw_dim_data.append(dw_dim)
+            da_data.append(da)
+            dc_data.append(dc)
+
+
 dw_dim_data = []
 da_data = []
 dc_data = []
 
-build_dataset(superpotential_tree, dw_dim_data, da_data, dc_data)
+print('Choose program...')
+print('1. All data')
+print('2. Theory with most children')
+program_num = int(input('>>'))
+
+if program_num == 1:
+    build_dataset(superpotential_tree, dw_dim_data, da_data, dc_data)
+elif program_num == 2:
+    build_dataset_most_children(superpotential_tree, dw_dim_data, da_data, dc_data)
+else:
+    exit()
 
 print(f"Data size: {len(dw_dim_data)}")
 
@@ -91,6 +174,6 @@ ax[0].set_ylabel('delta a')
 ax[1].set_xlabel('3-Delta')
 ax[1].set_ylabel('delta c')
 
-plt.savefig(f'./data/{theory_name}_3-Delta_delta_ac_plot.png')
+plt.savefig(f'./data/{theory_name}_3-Delta_delta_ac_plot{'_most_children' if program_num == 2 else ''}.png')
 
 plt.show()
