@@ -42,8 +42,8 @@ def refine_r_charge_string(raw_r: str) -> str:
 def build_superpotential_tree(filename: str) -> tuple[str, SuperpotentialTreeNode]:
     """
     Builds a superpotential tree from the given file.
-    :param filename: csv file that contains landscape data of only one theory.
-    :return: Superpotential tree where children is the superpotential which adds one
+    :param filename: csv file that contains landscape data.
+    :return: Superpotential tree of selected theory where children is the superpotential which adds one
     relevant gauge-invariant term from parent.
     """
     csv.field_size_limit(np.iinfo(np.int32).max)
@@ -68,11 +68,30 @@ def build_superpotential_tree(filename: str) -> tuple[str, SuperpotentialTreeNod
         elif data[0][i] == "Rcharges":
             r_index = i
 
-    theory_name = data[1][theory_index]
+    theory_num = dict()
+    for i in range(1, len(data)):
+        theory = data[i][theory_index]
+        if theory not in theory_num:
+            theory_num[theory] = 0
+        theory_num[theory] += 1
+
+    theory_num_list = list(theory_num.items())
+    theory_num_list.sort(key=lambda x: x[1], reverse=True)
+
+    print('Theory statistics in the file')
+    print('=================================')
+    for theory, num in theory_num_list:
+        print(f'{theory}: {num}')
+
+    theory_name = input('Choose a theory to build a tree: ')
+    assert theory_name in theory_num
 
     theory_data = []
 
     for i in range(1, len(data)):
+        if data[i][theory_index] != theory_name:
+            continue
+
         id = int(data[i][id_index])
         w = data[i][w_index]
         w = w[1:-1].split(',')
@@ -106,6 +125,8 @@ def build_superpotential_tree(filename: str) -> tuple[str, SuperpotentialTreeNod
         superpotential_tree.children.append(SuperpotentialTreeNode(theory, theory.w[0]))
 
     for length in range(2, max_length + 1):
+        if length not in theory_by_length:
+            continue
         for theory in theory_by_length[length]:
             parent_candidate = superpotential_tree
 
