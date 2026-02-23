@@ -4,6 +4,7 @@ import os.path
 import math
 import json
 import pathlib
+import pdb
 
 from common.superpotential_parser import serialize_w_term_list
 from common.superpotential_tree_parser import build_superpotential_tree, SuperpotentialTreeNode
@@ -69,6 +70,61 @@ def build_dataset(tree: SuperpotentialTreeNode, dw_dim_data: list[float], da_dat
             dw_dim_data.append(dw_dim)
             da_data.append(da)
             dc_data.append(dc)
+            data_color.append(color)
+
+        build_dataset(child, dw_dim_data, da_data, dc_data, data_color)
+
+
+def build_dataset_normalized(tree: SuperpotentialTreeNode, dw_dim_data: list[float], da_data: list[float], dc_data: list[float], data_color):
+    r_charges = tree.theory_data.r
+    for child in tree.children:
+        dw = serialize_w_term_list([child.added_term])[0]
+        dw_dim = 0
+
+        additional_a = 0.0
+        additional_c = 0.0
+        color = (1.0, 0.3, 0.3)
+
+        add_data = True
+        for op, index, exp in dw:
+            if op == 'M' and ('M' not in r_charges or index - 1 >= len(r_charges['M'])):
+                dw_dim += 2.0 / 3.0 * exp
+                additional_a += 1.0 / 48.0
+                additional_c += 1.0 / 24.0
+                color = (0.3, 0.3, 1.0)
+            elif op == 'X' and ('X' not in r_charges or index - 1 >= len(r_charges['X'])):
+                dw_dim += 2.0 / 3.0 * exp
+                additional_a += 1.0 / 48.0
+                additional_c += 1.0 / 24.0
+                color = (0.3, 0.3, 1.0)
+            elif op not in r_charges or index - 1 >= len(r_charges[op]):
+                add_data = False
+                break
+            else:
+                dw_dim += r_charges[op][index - 1] * exp
+
+        if add_data and dw_dim >= 2:
+            add_data = False
+
+        da = child.theory_data.a - tree.theory_data.a - additional_a
+        dc = child.theory_data.c - tree.theory_data.c - additional_c
+
+        if add_data and da >= 0:
+            print('Positive delta a!')
+            print(f'Child ID: {child.theory_data.id}')
+            print(f'Parent ID: {tree.theory_data.id}')
+            print(f'Child a: {child.theory_data.a}')
+            print(f'Parent a: {tree.theory_data.a}')
+            print(f'Added delta a: {additional_a}')
+            print(f'Added term: {child.added_term}')
+            add_data = False
+
+        if add_data:
+            dw_dim *= 1.5
+
+            dw_dim_data.append(dw_dim)
+            da_data.append(da / (tree.theory_data.a + additional_a))
+            dc_data.append(dc / (tree.theory_data.c + additional_c))
             data_color.append(color)
 
         build_dataset(child, dw_dim_data, da_data, dc_data, data_color)
@@ -153,6 +209,65 @@ def build_dataset_most_children(tree: SuperpotentialTreeNode, dw_dim_data: list[
     return most_children_node
 
 
+def build_dataset_most_children_normalized(tree: SuperpotentialTreeNode, dw_dim_data: list[float], da_data: list[float], dc_data: list[float], data_color):
+    most_children_node = get_most_children_node(tree)
+
+    print('Most children node:')
+    print(f'ID: {most_children_node.theory_data.id}')
+    print(f"W = {most_children_node.theory_data.w}")
+
+    r_charges = most_children_node.theory_data.r
+
+    for child in most_children_node.children:
+        dw = serialize_w_term_list([child.added_term])[0]
+        dw_dim = 0
+
+        additional_a = 0.0
+        additional_c = 0.0
+        color = (1.0, 0.3, 0.3)
+
+        add_data = True
+        for op, index, exp in dw:
+            if op == 'M' and ('M' not in r_charges or index - 1 >= len(r_charges['M'])):
+                dw_dim += 2.0 / 3.0 * exp
+                additional_a += 1.0 / 48.0
+                additional_c += 1.0 / 24.0
+                color = (0.3, 0.3, 1.0)
+            elif op == 'X' and ('X' not in r_charges or index - 1 >= len(r_charges['X'])):
+                dw_dim += 2.0 / 3.0 * exp
+                additional_a += 1.0 / 48.0
+                additional_c += 1.0 / 24.0
+                color = (0.3, 0.3, 1.0)
+            elif op not in r_charges or index - 1 >= len(r_charges[op]):
+                add_data = False
+                break
+            else:
+                dw_dim += r_charges[op][index - 1] * exp
+
+        if add_data and dw_dim >= 2:
+            add_data = False
+
+        da = child.theory_data.a - most_children_node.theory_data.a - additional_a
+        dc = child.theory_data.c - most_children_node.theory_data.c - additional_c
+        if da > 0:
+            print('Positive delta a!')
+            print(f'Child a: {child.theory_data.a}')
+            print(f'Parent a: {tree.theory_data.a}')
+            print(f'Added delta a: {additional_a}')
+            print(f'Added term: {child.added_term}')
+            add_data = False
+
+        if add_data:
+            dw_dim *= 1.5
+
+            dw_dim_data.append(dw_dim)
+            da_data.append(da / (tree.theory_data.a + additional_a))
+            dc_data.append(dc / (tree.theory_data.c + additional_c))
+            data_color.append(color)
+
+    return most_children_node
+
+
 dw_dim_data = []
 da_data = []
 dc_data = []
@@ -160,14 +275,41 @@ data_color = []
 
 print('Choose program...')
 print('1. All data')
-print('2. Theory with most children')
+print('2. All data with da/a and dc/c')
+print('3. Theory with most children')
+print('4. Theory with most children with da/a and dc/c')
 program_num = int(input('>>'))
 
+fig_name = ''
+save_file_name = ''
+a_axis_name = ''
+c_axis_name = ''
 most_children_node = None
+
 if program_num == 1:
     build_dataset(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
+    fig_name = f'Plot of 3-Delta and delta a and delta c of {theory_name} theory'
+    save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot.png'
+    a_axis_name = 'delta a'
+    c_axis_name = 'delta c'
 elif program_num == 2:
+    build_dataset_normalized(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
+    fig_name = f'Plot of 3-Delta and delta a / a and delta c / c of {theory_name} theory'
+    save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot_normalized.png'
+    a_axis_name = 'delta a / a'
+    c_axis_name = 'delta c / c'
+elif program_num == 3:
     most_children_node = build_dataset_most_children(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
+    fig_name = f'Plot of 3-Delta and delta a and delta c of {theory_name} theory\nfrom parent theory ID {most_children_node.theory_data.id}'
+    save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot_most_children.png'
+    a_axis_name = 'delta a'
+    c_axis_name = 'delta c'
+elif program_num == 4:
+    most_children_node = build_dataset_most_children_normalized(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
+    fig_name = f'Plot of 3-Delta and delta a / a and delta c / c of {theory_name} theory\nfrom parent theory ID {most_children_node.theory_data.id}'
+    save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot_most_children_normalized.png'
+    a_axis_name = 'delta a / a'
+    c_axis_name = 'delta c / c'
 else:
     exit()
 
@@ -195,21 +337,19 @@ plt.rcParams['figure.figsize'] = (16, 12)
 plt.rcParams['font.size'] = 15
 
 fig, ax = plt.subplots(1, 2, sharey=True, squeeze=True)
-fig.suptitle(f'Plot of 3-Delta and delta a and delta c of {theory_name} theory'
-             + f'{f'\nfrom parent theory ID {most_children_node.theory_data.id}' if program_num == 2 else ''}'
-             )
+fig.suptitle(fig_name)
 
 ax[0].scatter(three_minus_dim, da_data, s=4, c=data_color)
 ax[0].plot(dim_plot, -np.exp(pa(np.log(dim_plot))), 'g--')
-ax[0].text(0.01, 0, f'delta a = {-np.exp(za[1]):.3f}*epsilon^{za[0]:.3f}')
+ax[0].text(0.01, 0, f'{a_axis_name} = {-np.exp(za[1]):.3f}*epsilon^{za[0]:.3f}')
 ax[1].scatter(three_minus_dim, dc_data, s=4, c=data_color)
 ax[1].plot(dim_plot, -np.exp(pc(np.log(dim_plot))), 'g--')
-ax[1].text(0.01, 0, f'delta a = {-np.exp(zc[1]):.3f}*epsilon^{zc[0]:.3f}')
+ax[1].text(0.01, 0, f'{c_axis_name} = {-np.exp(zc[1]):.3f}*epsilon^{zc[0]:.3f}')
 ax[0].set_xlabel('3-Delta')
-ax[0].set_ylabel('delta a')
+ax[0].set_ylabel(a_axis_name)
 ax[1].set_xlabel('3-Delta')
-ax[1].set_ylabel('delta c')
+ax[1].set_ylabel(c_axis_name)
 
-plt.savefig(f'./data/{theory_name}_3-Delta_delta_ac_plot{'_most_children' if program_num == 2 else ''}.png')
+plt.savefig(save_file_name)
 
 plt.show()
