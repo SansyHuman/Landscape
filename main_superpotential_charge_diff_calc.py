@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+os.makedirs('./data', exist_ok=True)
+
 filename = input('Enter file name that contains data of landscape: ')
 
 theory_name, superpotential_tree = build_superpotential_tree(filename)
