@@ -19,6 +19,8 @@ filename = input('Enter file name that contains data of landscape: ')
 
 theory_name, superpotential_tree = build_superpotential_tree(filename)
 
+normal_color = (1.0, 0.3, 0.3)
+flip_color = (0.3, 0.3, 1.0)
 
 def build_dataset(tree: SuperpotentialTreeNode, dw_dim_data: list[float], da_data: list[float], dc_data: list[float], data_color):
     r_charges = tree.theory_data.r
@@ -28,7 +30,7 @@ def build_dataset(tree: SuperpotentialTreeNode, dw_dim_data: list[float], da_dat
 
         additional_a = 0.0
         additional_c = 0.0
-        color = (1.0, 0.3, 0.3)
+        color = normal_color
 
         add_data = True
         for op, index, exp in dw:
@@ -36,12 +38,12 @@ def build_dataset(tree: SuperpotentialTreeNode, dw_dim_data: list[float], da_dat
                 dw_dim += 2.0 / 3.0 * exp
                 additional_a += 1.0 / 48.0
                 additional_c += 1.0 / 24.0
-                color = (0.3, 0.3, 1.0)
+                color = flip_color
             elif op == 'X' and ('X' not in r_charges or index - 1 >= len(r_charges['X'])):
                 dw_dim += 2.0 / 3.0 * exp
                 additional_a += 1.0 / 48.0
                 additional_c += 1.0 / 24.0
-                color = (0.3, 0.3, 1.0)
+                color = flip_color
             elif op not in r_charges or index - 1 >= len(r_charges[op]):
                 add_data = False
                 break
@@ -83,7 +85,7 @@ def build_dataset_normalized(tree: SuperpotentialTreeNode, dw_dim_data: list[flo
 
         additional_a = 0.0
         additional_c = 0.0
-        color = (1.0, 0.3, 0.3)
+        color = normal_color
 
         add_data = True
         for op, index, exp in dw:
@@ -91,12 +93,12 @@ def build_dataset_normalized(tree: SuperpotentialTreeNode, dw_dim_data: list[flo
                 dw_dim += 2.0 / 3.0 * exp
                 additional_a += 1.0 / 48.0
                 additional_c += 1.0 / 24.0
-                color = (0.3, 0.3, 1.0)
+                color = flip_color
             elif op == 'X' and ('X' not in r_charges or index - 1 >= len(r_charges['X'])):
                 dw_dim += 2.0 / 3.0 * exp
                 additional_a += 1.0 / 48.0
                 additional_c += 1.0 / 24.0
-                color = (0.3, 0.3, 1.0)
+                color = flip_color
             elif op not in r_charges or index - 1 >= len(r_charges[op]):
                 add_data = False
                 break
@@ -165,7 +167,7 @@ def build_dataset_most_children(tree: SuperpotentialTreeNode, dw_dim_data: list[
 
         additional_a = 0.0
         additional_c = 0.0
-        color = (1.0, 0.3, 0.3)
+        color = normal_color
 
         add_data = True
         for op, index, exp in dw:
@@ -173,12 +175,12 @@ def build_dataset_most_children(tree: SuperpotentialTreeNode, dw_dim_data: list[
                 dw_dim += 2.0 / 3.0 * exp
                 additional_a += 1.0 / 48.0
                 additional_c += 1.0 / 24.0
-                color = (0.3, 0.3, 1.0)
+                color = flip_color
             elif op == 'X' and ('X' not in r_charges or index - 1 >= len(r_charges['X'])):
                 dw_dim += 2.0 / 3.0 * exp
                 additional_a += 1.0 / 48.0
                 additional_c += 1.0 / 24.0
-                color = (0.3, 0.3, 1.0)
+                color = flip_color
             elif op not in r_charges or index - 1 >= len(r_charges[op]):
                 add_data = False
                 break
@@ -224,7 +226,7 @@ def build_dataset_most_children_normalized(tree: SuperpotentialTreeNode, dw_dim_
 
         additional_a = 0.0
         additional_c = 0.0
-        color = (1.0, 0.3, 0.3)
+        color = normal_color
 
         add_data = True
         for op, index, exp in dw:
@@ -232,12 +234,12 @@ def build_dataset_most_children_normalized(tree: SuperpotentialTreeNode, dw_dim_
                 dw_dim += 2.0 / 3.0 * exp
                 additional_a += 1.0 / 48.0
                 additional_c += 1.0 / 24.0
-                color = (0.3, 0.3, 1.0)
+                color = flip_color
             elif op == 'X' and ('X' not in r_charges or index - 1 >= len(r_charges['X'])):
                 dw_dim += 2.0 / 3.0 * exp
                 additional_a += 1.0 / 48.0
                 additional_c += 1.0 / 24.0
-                color = (0.3, 0.3, 1.0)
+                color = flip_color
             elif op not in r_charges or index - 1 >= len(r_charges[op]):
                 add_data = False
                 break
