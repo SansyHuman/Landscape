@@ -325,10 +325,30 @@ log_dim = np.log(three_minus_dim)
 log_da = np.log(da)
 log_dc = np.log(dc)
 
-za = np.polyfit(log_dim, log_da, 1)
-zc = np.polyfit(log_dim, log_dc, 1)
-pa = np.poly1d(za)
-pc = np.poly1d(zc)
+normal_index = []
+flip_index = []
+for i in range(len(data_color)):
+    if data_color[i] == normal_color:
+        normal_index.append(i)
+    else:
+        flip_index.append(i)
+
+log_dim_normal = log_dim[normal_index]
+log_dim_flip = log_dim[flip_index]
+log_da_normal = log_da[normal_index]
+log_da_flip = log_da[flip_index]
+log_dc_normal = log_dc[normal_index]
+log_dc_flip = log_dc[flip_index]
+
+za_normal = np.polyfit(log_dim_normal, log_da_normal, 1)
+za_flip = np.polyfit(log_dim_flip, log_da_flip, 1)
+zc_normal = np.polyfit(log_dim_normal, log_dc_normal, 1)
+zc_flip = np.polyfit(log_dim_flip, log_dc_flip, 1)
+
+pa_normal = np.poly1d(za_normal)
+pa_flip = np.poly1d(za_flip)
+pc_normal = np.poly1d(zc_normal)
+pc_flip = np.poly1d(zc_flip)
 
 min_dim = np.min(three_minus_dim)
 max_dim = np.max(three_minus_dim)
@@ -342,11 +362,15 @@ fig, ax = plt.subplots(1, 2, sharey=True, squeeze=True)
 fig.suptitle(fig_name)
 
 ax[0].scatter(three_minus_dim, da_data, s=4, c=data_color)
-ax[0].plot(dim_plot, -np.exp(pa(np.log(dim_plot))), 'g--')
-ax[0].text(0.01, 0, f'{a_axis_name} = {-np.exp(za[1]):.3f}*epsilon^{za[0]:.3f}')
+ax[0].plot(dim_plot, -np.exp(pa_normal(np.log(dim_plot))), 'r--')
+ax[0].text(0.01, -np.exp(pa_normal(np.log(dim_plot[-10]))), f'{a_axis_name}_normal = {-np.exp(za_normal[1]):.3f}*epsilon^{za_normal[0]:.3f}')
+ax[0].plot(dim_plot, -np.exp(pa_flip(np.log(dim_plot))), 'b--')
+ax[0].text(0.01, 0, f'{a_axis_name}_flip = {-np.exp(za_flip[1]):.3f}*epsilon^{za_flip[0]:.3f}')
 ax[1].scatter(three_minus_dim, dc_data, s=4, c=data_color)
-ax[1].plot(dim_plot, -np.exp(pc(np.log(dim_plot))), 'g--')
-ax[1].text(0.01, 0, f'{c_axis_name} = {-np.exp(zc[1]):.3f}*epsilon^{zc[0]:.3f}')
+ax[1].plot(dim_plot, -np.exp(pc_normal(np.log(dim_plot))), 'r--')
+ax[1].text(0.01, -np.exp(pc_normal(np.log(dim_plot[-10]))), f'{c_axis_name}_normal = {-np.exp(zc_normal[1]):.3f}*epsilon^{zc_normal[0]:.3f}')
+ax[1].plot(dim_plot, -np.exp(pc_flip(np.log(dim_plot))), 'b--')
+ax[1].text(0.01, 0, f'{c_axis_name}_flip = {-np.exp(zc_flip[1]):.3f}*epsilon^{zc_flip[0]:.3f}')
 ax[0].set_xlabel('3-Delta')
 ax[0].set_ylabel(a_axis_name)
 ax[1].set_xlabel('3-Delta')
