@@ -263,8 +263,8 @@ def build_dataset_most_children_normalized(tree: SuperpotentialTreeNode, dw_dim_
             dw_dim *= 1.5
 
             dw_dim_data.append(dw_dim)
-            da_data.append(da / (tree.theory_data.a + additional_a))
-            dc_data.append(dc / (tree.theory_data.c + additional_c))
+            da_data.append(da / (most_children_node.theory_data.a + additional_a))
+            dc_data.append(dc / (most_children_node.theory_data.c + additional_c))
             data_color.append(color)
 
     return most_children_node
@@ -317,9 +317,13 @@ else:
 
 print(f"Data size: {len(dw_dim_data)}")
 
-three_minus_dim = np.full_like(len(dw_dim_data), 3.0) - np.array(dw_dim_data)
-da = -np.array(da_data)
-dc = np.abs(-np.array(dc_data))
+dw_dim_data = np.array(dw_dim_data)
+da_data = np.array(da_data)
+dc_data = np.array(dc_data)
+
+three_minus_dim = np.full_like(len(dw_dim_data), 3.0) - dw_dim_data
+da = -da_data
+dc = np.abs(-dc_data)
 
 log_dim = np.log(three_minus_dim)
 log_da = np.log(da)
@@ -345,10 +349,32 @@ za_flip = np.polyfit(log_dim_flip, log_da_flip, 1)
 zc_normal = np.polyfit(log_dim_normal, log_dc_normal, 1)
 zc_flip = np.polyfit(log_dim_flip, log_dc_flip, 1)
 
+
+def rsquared(x, y, fit):
+    yavg = np.average(y)
+    f = -np.exp(fit(np.log(x)))
+    ss_res = np.sum((y - f)**2)
+    ss_tot = np.sum((y - yavg)**2)
+
+    return 1 - ss_res / ss_tot
+
+
 pa_normal = np.poly1d(za_normal)
 pa_flip = np.poly1d(za_flip)
 pc_normal = np.poly1d(zc_normal)
 pc_flip = np.poly1d(zc_flip)
+
+dim_normal_data = three_minus_dim[normal_index]
+dim_flip_data = three_minus_dim[flip_index]
+da_normal_data = da_data[normal_index]
+da_flip_data = da_data[flip_index]
+dc_normal_data = dc_data[normal_index]
+dc_flip_data = dc_data[flip_index]
+
+a_normal_r2 = rsquared(dim_normal_data, da_normal_data, pa_normal)
+a_flip_r2 = rsquared(dim_flip_data, da_flip_data, pa_flip)
+c_normal_r2 = rsquared(dim_normal_data, dc_normal_data, pc_normal)
+c_flip_r2 = rsquared(dim_flip_data, dc_flip_data, pc_flip)
 
 min_dim = np.min(three_minus_dim)
 max_dim = np.max(three_minus_dim)
@@ -363,14 +389,14 @@ fig.suptitle(fig_name)
 
 ax[0].scatter(three_minus_dim, da_data, s=4, c=data_color)
 ax[0].plot(dim_plot, -np.exp(pa_normal(np.log(dim_plot))), 'r--')
-ax[0].text(0.01, -np.exp(pa_normal(np.log(dim_plot[-10]))), f'{a_axis_name}_normal = {-np.exp(za_normal[1]):.3f}*epsilon^{za_normal[0]:.3f}')
+ax[0].text(0.01, -np.exp(pa_normal(np.log(dim_plot[-10]))), f'{a_axis_name}_normal = {-np.exp(za_normal[1]):.3f}*epsilon^{za_normal[0]:.3f}\nR2 = {a_normal_r2:.3f}')
 ax[0].plot(dim_plot, -np.exp(pa_flip(np.log(dim_plot))), 'b--')
-ax[0].text(0.01, 0, f'{a_axis_name}_flip = {-np.exp(za_flip[1]):.3f}*epsilon^{za_flip[0]:.3f}')
+ax[0].text(0.01, 0, f'{a_axis_name}_flip = {-np.exp(za_flip[1]):.3f}*epsilon^{za_flip[0]:.3f}\nR2 = {a_flip_r2:.3f}')
 ax[1].scatter(three_minus_dim, dc_data, s=4, c=data_color)
 ax[1].plot(dim_plot, -np.exp(pc_normal(np.log(dim_plot))), 'r--')
-ax[1].text(0.01, -np.exp(pc_normal(np.log(dim_plot[-10]))), f'{c_axis_name}_normal = {-np.exp(zc_normal[1]):.3f}*epsilon^{zc_normal[0]:.3f}')
+ax[1].text(0.01, -np.exp(pc_normal(np.log(dim_plot[-10]))), f'{c_axis_name}_normal = {-np.exp(zc_normal[1]):.3f}*epsilon^{zc_normal[0]:.3f}\nR2 = {c_normal_r2:.3f}')
 ax[1].plot(dim_plot, -np.exp(pc_flip(np.log(dim_plot))), 'b--')
-ax[1].text(0.01, 0, f'{c_axis_name}_flip = {-np.exp(zc_flip[1]):.3f}*epsilon^{zc_flip[0]:.3f}')
+ax[1].text(0.01, 0, f'{c_axis_name}_flip = {-np.exp(zc_flip[1]):.3f}*epsilon^{zc_flip[0]:.3f}\nR2 = {c_flip_r2:.3f}')
 ax[0].set_xlabel('3-Delta')
 ax[0].set_ylabel(a_axis_name)
 ax[1].set_xlabel('3-Delta')
