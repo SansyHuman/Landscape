@@ -269,139 +269,143 @@ def build_dataset_most_children_normalized(tree: SuperpotentialTreeNode, dw_dim_
 
     return most_children_node
 
+while True:
+    dw_dim_data = []
+    da_data = []
+    dc_data = []
+    data_color = []
 
-dw_dim_data = []
-da_data = []
-dc_data = []
-data_color = []
+    print('Choose program...')
+    print('1. All data')
+    print('2. All data with da/a and dc/c')
+    print('3. Theory with most children')
+    print('4. Theory with most children with da/a and dc/c')
+    program_num = int(input('>>'))
 
-print('Choose program...')
-print('1. All data')
-print('2. All data with da/a and dc/c')
-print('3. Theory with most children')
-print('4. Theory with most children with da/a and dc/c')
-program_num = int(input('>>'))
+    fig_name = ''
+    save_file_name = ''
+    a_axis_name = ''
+    c_axis_name = ''
+    most_children_node = None
 
-fig_name = ''
-save_file_name = ''
-a_axis_name = ''
-c_axis_name = ''
-most_children_node = None
-
-if program_num == 1:
-    build_dataset(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
-    fig_name = f'Plot of 3-Delta and delta a and delta c of {theory_name} theory'
-    save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot.png'
-    a_axis_name = 'delta a'
-    c_axis_name = 'delta c'
-elif program_num == 2:
-    build_dataset_normalized(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
-    fig_name = f'Plot of 3-Delta and delta a / a and delta c / c of {theory_name} theory'
-    save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot_normalized.png'
-    a_axis_name = 'delta a / a'
-    c_axis_name = 'delta c / c'
-elif program_num == 3:
-    most_children_node = build_dataset_most_children(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
-    fig_name = f'Plot of 3-Delta and delta a and delta c of {theory_name} theory\nfrom parent theory ID {most_children_node.theory_data.id}'
-    save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot_most_children.png'
-    a_axis_name = 'delta a'
-    c_axis_name = 'delta c'
-elif program_num == 4:
-    most_children_node = build_dataset_most_children_normalized(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
-    fig_name = f'Plot of 3-Delta and delta a / a and delta c / c of {theory_name} theory\nfrom parent theory ID {most_children_node.theory_data.id}'
-    save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot_most_children_normalized.png'
-    a_axis_name = 'delta a / a'
-    c_axis_name = 'delta c / c'
-else:
-    exit()
-
-print(f"Data size: {len(dw_dim_data)}")
-
-dw_dim_data = np.array(dw_dim_data)
-da_data = np.array(da_data)
-dc_data = np.array(dc_data)
-
-three_minus_dim = np.full_like(len(dw_dim_data), 3.0) - dw_dim_data
-da = -da_data
-dc = np.abs(-dc_data)
-
-log_dim = np.log(three_minus_dim)
-log_da = np.log(da)
-log_dc = np.log(dc)
-
-normal_index = []
-flip_index = []
-for i in range(len(data_color)):
-    if data_color[i] == normal_color:
-        normal_index.append(i)
+    if program_num == 1:
+        build_dataset(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
+        fig_name = f'Plot of 3-Delta and delta a and delta c of {theory_name} theory'
+        save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot.png'
+        a_axis_name = 'delta a'
+        c_axis_name = 'delta c'
+    elif program_num == 2:
+        build_dataset_normalized(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
+        fig_name = f'Plot of 3-Delta and delta a / a and delta c / c of {theory_name} theory'
+        save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot_normalized.png'
+        a_axis_name = 'delta a / a'
+        c_axis_name = 'delta c / c'
+    elif program_num == 3:
+        most_children_node = build_dataset_most_children(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
+        fig_name = f'Plot of 3-Delta and delta a and delta c of {theory_name} theory\nfrom parent theory ID {most_children_node.theory_data.id}'
+        save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot_most_children.png'
+        a_axis_name = 'delta a'
+        c_axis_name = 'delta c'
+    elif program_num == 4:
+        most_children_node = build_dataset_most_children_normalized(superpotential_tree, dw_dim_data, da_data, dc_data, data_color)
+        fig_name = f'Plot of 3-Delta and delta a / a and delta c / c of {theory_name} theory\nfrom parent theory ID {most_children_node.theory_data.id}'
+        save_file_name = f'./data/{theory_name}_3-Delta_delta_ac_plot_most_children_normalized.png'
+        a_axis_name = 'delta a / a'
+        c_axis_name = 'delta c / c'
     else:
-        flip_index.append(i)
+        exit()
 
-log_dim_normal = log_dim[normal_index]
-log_dim_flip = log_dim[flip_index]
-log_da_normal = log_da[normal_index]
-log_da_flip = log_da[flip_index]
-log_dc_normal = log_dc[normal_index]
-log_dc_flip = log_dc[flip_index]
+    print(f"Data size: {len(dw_dim_data)}")
 
-za_normal = np.polyfit(log_dim_normal, log_da_normal, 1)
-za_flip = np.polyfit(log_dim_flip, log_da_flip, 1)
-zc_normal = np.polyfit(log_dim_normal, log_dc_normal, 1)
-zc_flip = np.polyfit(log_dim_flip, log_dc_flip, 1)
+    dw_dim_data = np.array(dw_dim_data)
+    da_data = np.array(da_data)
+    dc_data = np.array(dc_data)
+
+    three_minus_dim = np.full_like(len(dw_dim_data), 3.0) - dw_dim_data
+    da = -da_data
+    dc = np.abs(-dc_data)
+
+    log_dim = np.log(three_minus_dim)
+    log_da = np.log(da)
+    log_dc = np.log(dc)
+
+    normal_index = []
+    flip_index = []
+    for i in range(len(data_color)):
+        if data_color[i] == normal_color:
+            normal_index.append(i)
+        else:
+            flip_index.append(i)
+
+    log_dim_normal = log_dim[normal_index]
+    log_dim_flip = log_dim[flip_index]
+    log_da_normal = log_da[normal_index]
+    log_da_flip = log_da[flip_index]
+    log_dc_normal = log_dc[normal_index]
+    log_dc_flip = log_dc[flip_index]
+
+    za_normal = np.polyfit(log_dim_normal, log_da_normal, 1) if len(log_dim_normal) > 0 else None
+    za_flip = np.polyfit(log_dim_flip, log_da_flip, 1) if len(log_dim_flip) > 0 else None
+    zc_normal = np.polyfit(log_dim_normal, log_dc_normal, 1) if len(log_dim_normal) > 0 else None
+    zc_flip = np.polyfit(log_dim_flip, log_dc_flip, 1) if len(log_dim_flip) > 0 else None
 
 
-def rsquared(x, y, fit):
-    yavg = np.average(y)
-    f = -np.exp(fit(np.log(x)))
-    ss_res = np.sum((y - f)**2)
-    ss_tot = np.sum((y - yavg)**2)
+    def rsquared(x, y, fit):
+        yavg = np.average(y)
+        f = -np.exp(fit(np.log(x)))
+        ss_res = np.sum((y - f)**2)
+        ss_tot = np.sum((y - yavg)**2)
 
-    return 1 - ss_res / ss_tot
+        return 1 - ss_res / ss_tot
 
 
-pa_normal = np.poly1d(za_normal)
-pa_flip = np.poly1d(za_flip)
-pc_normal = np.poly1d(zc_normal)
-pc_flip = np.poly1d(zc_flip)
+    pa_normal = np.poly1d(za_normal) if za_normal is not None else None
+    pa_flip = np.poly1d(za_flip) if za_flip is not None else None
+    pc_normal = np.poly1d(zc_normal) if zc_normal is not None else None
+    pc_flip = np.poly1d(zc_flip) if zc_flip is not None else None
 
-dim_normal_data = three_minus_dim[normal_index]
-dim_flip_data = three_minus_dim[flip_index]
-da_normal_data = da_data[normal_index]
-da_flip_data = da_data[flip_index]
-dc_normal_data = dc_data[normal_index]
-dc_flip_data = dc_data[flip_index]
+    dim_normal_data = three_minus_dim[normal_index]
+    dim_flip_data = three_minus_dim[flip_index]
+    da_normal_data = da_data[normal_index]
+    da_flip_data = da_data[flip_index]
+    dc_normal_data = dc_data[normal_index]
+    dc_flip_data = dc_data[flip_index]
 
-a_normal_r2 = rsquared(dim_normal_data, da_normal_data, pa_normal)
-a_flip_r2 = rsquared(dim_flip_data, da_flip_data, pa_flip)
-c_normal_r2 = rsquared(dim_normal_data, dc_normal_data, pc_normal)
-c_flip_r2 = rsquared(dim_flip_data, dc_flip_data, pc_flip)
+    a_normal_r2 = rsquared(dim_normal_data, da_normal_data, pa_normal) if pa_normal is not None else 0
+    a_flip_r2 = rsquared(dim_flip_data, da_flip_data, pa_flip) if pa_flip is not None else 0
+    c_normal_r2 = rsquared(dim_normal_data, dc_normal_data, pc_normal) if pc_normal is not None else 0
+    c_flip_r2 = rsquared(dim_flip_data, dc_flip_data, pc_flip) if pc_flip is not None else 0
 
-min_dim = np.min(three_minus_dim)
-max_dim = np.max(three_minus_dim)
-dim_plot = np.linspace(min_dim, max_dim, 100)
+    min_dim = np.min(three_minus_dim)
+    max_dim = np.max(three_minus_dim)
+    dim_plot = np.linspace(min_dim, max_dim, 100)
 
-plt.style.use('default')
-plt.rcParams['figure.figsize'] = (16, 12)
-plt.rcParams['font.size'] = 15
+    plt.style.use('default')
+    plt.rcParams['figure.figsize'] = (16, 12)
+    plt.rcParams['font.size'] = 15
 
-fig, ax = plt.subplots(1, 2, sharey=True, squeeze=True)
-fig.suptitle(fig_name)
+    fig, ax = plt.subplots(1, 2, sharey=True, squeeze=True)
+    fig.suptitle(fig_name + f'\nnormal: {len(log_dim_normal)}, flip: {len(log_dim_flip)}')
 
-ax[0].scatter(three_minus_dim, da_data, s=4, c=data_color)
-ax[0].plot(dim_plot, -np.exp(pa_normal(np.log(dim_plot))), 'r--')
-ax[0].text(min_dim, -np.exp(pa_normal(np.log(dim_plot[-10]))), f'{a_axis_name}_normal = {-np.exp(za_normal[1]):.3f}*epsilon^{za_normal[0]:.3f}\nR2 = {a_normal_r2:.3f}')
-ax[0].plot(dim_plot, -np.exp(pa_flip(np.log(dim_plot))), 'b--')
-ax[0].text(min_dim, 0, f'{a_axis_name}_flip = {-np.exp(za_flip[1]):.3f}*epsilon^{za_flip[0]:.3f}\nR2 = {a_flip_r2:.3f}')
-ax[1].scatter(three_minus_dim, dc_data, s=4, c=data_color)
-ax[1].plot(dim_plot, -np.exp(pc_normal(np.log(dim_plot))), 'r--')
-ax[1].text(min_dim, -np.exp(pc_normal(np.log(dim_plot[-10]))), f'{c_axis_name}_normal = {-np.exp(zc_normal[1]):.3f}*epsilon^{zc_normal[0]:.3f}\nR2 = {c_normal_r2:.3f}')
-ax[1].plot(dim_plot, -np.exp(pc_flip(np.log(dim_plot))), 'b--')
-ax[1].text(min_dim, 0, f'{c_axis_name}_flip = {-np.exp(zc_flip[1]):.3f}*epsilon^{zc_flip[0]:.3f}\nR2 = {c_flip_r2:.3f}')
-ax[0].set_xlabel('3-Delta')
-ax[0].set_ylabel(a_axis_name)
-ax[1].set_xlabel('3-Delta')
-ax[1].set_ylabel(c_axis_name)
+    ax[0].scatter(three_minus_dim, da_data, s=4, c=data_color)
+    if pa_normal is not None:
+        ax[0].plot(dim_plot, -np.exp(pa_normal(np.log(dim_plot))), 'r--')
+        ax[0].text(min_dim, -np.exp(pa_normal(np.log(dim_plot[-10]))), f'{a_axis_name}_normal = {-np.exp(za_normal[1]):.3f}*epsilon^{za_normal[0]:.3f}\nR2 = {a_normal_r2:.3f}')
+    if pa_flip is not None:
+        ax[0].plot(dim_plot, -np.exp(pa_flip(np.log(dim_plot))), 'b--')
+        ax[0].text(min_dim, 0, f'{a_axis_name}_flip = {-np.exp(za_flip[1]):.3f}*epsilon^{za_flip[0]:.3f}\nR2 = {a_flip_r2:.3f}')
+    ax[1].scatter(three_minus_dim, dc_data, s=4, c=data_color)
+    if pc_normal is not None:
+        ax[1].plot(dim_plot, -np.exp(pc_normal(np.log(dim_plot))), 'r--')
+        ax[1].text(min_dim, -np.exp(pc_normal(np.log(dim_plot[-10]))), f'{c_axis_name}_normal = {-np.exp(zc_normal[1]):.3f}*epsilon^{zc_normal[0]:.3f}\nR2 = {c_normal_r2:.3f}')
+    if pc_flip is not None:
+        ax[1].plot(dim_plot, -np.exp(pc_flip(np.log(dim_plot))), 'b--')
+        ax[1].text(min_dim, 0, f'{c_axis_name}_flip = {-np.exp(zc_flip[1]):.3f}*epsilon^{zc_flip[0]:.3f}\nR2 = {c_flip_r2:.3f}')
+    ax[0].set_xlabel('3-Delta')
+    ax[0].set_ylabel(a_axis_name)
+    ax[1].set_xlabel('3-Delta')
+    ax[1].set_ylabel(c_axis_name)
 
-plt.savefig(save_file_name)
+    plt.savefig(save_file_name)
 
-plt.show()
+    plt.show()
