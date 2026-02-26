@@ -40,14 +40,17 @@ for i in range(len(stats)):
     print(f'{i * 10} - {i * 10 + 9}: {stats[i]}')
 
 min_children_num = int(input('Enter minimum number of children to fit 3-Delta - delta a plot: '))
+min_points_num = int(input('Enter the minimum number of normal or flip fixed points to plot: '))
 
 
-def fit_nodes(tree: SuperpotentialTreeNode, theory_data, fit_data, min_children_num):
+def fit_nodes(tree: SuperpotentialTreeNode, theory_data, fit_data_normal, fit_data_flip, min_children_num, min_points_num):
     # Theory data: [theory id, number of children, a, c]
     # Fit data: [A, n] where delta a = A*(3 - Delta)^n
     if len(tree.children) >= min_children_num:
-        dw_dim_data = []
-        da_data = []
+        dw_dim_normal = []
+        dw_dim_flip = []
+        da_normal = []
+        da_flip = []
 
         r_charges = tree.theory_data.r
 
@@ -59,15 +62,18 @@ def fit_nodes(tree: SuperpotentialTreeNode, theory_data, fit_data, min_children_
             additional_c = 0.0
 
             add_data = True
+            flip = False
             for op, index, exp in dw:
                 if op == 'M' and ('M' not in r_charges or index - 1 >= len(r_charges['M'])):
                     dw_dim += 2.0 / 3.0 * exp
                     additional_a += 1.0 / 48.0
                     additional_c += 1.0 / 24.0
+                    flip = True
                 elif op == 'X' and ('X' not in r_charges or index - 1 >= len(r_charges['X'])):
                     dw_dim += 2.0 / 3.0 * exp
                     additional_a += 1.0 / 48.0
                     additional_c += 1.0 / 24.0
+                    flip = True
                 elif op not in r_charges or index - 1 >= len(r_charges[op]):
                     add_data = False
                     break
@@ -89,31 +95,53 @@ def fit_nodes(tree: SuperpotentialTreeNode, theory_data, fit_data, min_children_
             if add_data:
                 dw_dim *= 1.5
 
-                dw_dim_data.append(dw_dim)
-                da_data.append(da)
-
-        three_minus_dim = np.full_like(len(dw_dim_data), 3.0) - np.array(dw_dim_data)
-        da = -np.array(da_data)
-
-        log_dim = np.log(three_minus_dim)
-        log_da = np.log(da)
-
-        za = np.polyfit(log_dim, log_da, 1)
+                if flip:
+                    dw_dim_flip.append(dw_dim)
+                    da_flip.append(da)
+                else:
+                    dw_dim_normal.append(dw_dim)
+                    da_normal.append(da)
 
         theory_data.append([tree.theory_data.id, len(tree.children), tree.theory_data.a, tree.theory_data.c])
-        fit_data.append([float(-np.exp(za[1])), float(za[0])])
+
+        if len(dw_dim_normal) >= min_points_num:
+            three_minus_dim = np.full_like(len(dw_dim_normal), 3.0) - np.array(dw_dim_normal)
+            da = -np.array(da_normal)
+
+            log_dim = np.log(three_minus_dim)
+            log_da = np.log(da)
+
+            za = np.polyfit(log_dim, log_da, 1)
+
+            fit_data_normal.append([float(-np.exp(za[1])), float(za[0])])
+        else:
+            fit_data_normal.append([None, None])
+
+        if len(dw_dim_flip) >= min_points_num:
+            three_minus_dim = np.full_like(len(dw_dim_flip), 3.0) - np.array(dw_dim_flip)
+            da = -np.array(da_flip)
+
+            log_dim = np.log(three_minus_dim)
+            log_da = np.log(da)
+
+            za = np.polyfit(log_dim, log_da, 1)
+
+            fit_data_flip.append([float(-np.exp(za[1])), float(za[0])])
+        else:
+            fit_data_flip.append([None, None])
 
     for child in tree.children:
-        fit_nodes(child, theory_data, fit_data, min_children_num)
+        fit_nodes(child, theory_data, fit_data_normal, fit_data_flip, min_children_num, min_points_num)
 
 
 theory_data = []
-fit_data = []
-fit_nodes(superpotential_tree, theory_data, fit_data, min_children_num)
+fit_data_normal = []
+fit_data_flip = []
+fit_nodes(superpotential_tree, theory_data, fit_data_normal, fit_data_flip, min_children_num, min_points_num)
 
 with open(f'./data/{theory_name}_3-Delta_delta_a_fittings.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
-    writer.writerow(['ID', 'Number of children', 'a', 'c', 'A', 'n'])
+    writer.writerow(['ID', 'Number of children', 'a', 'c', 'A_nomral', 'n_normal', 'A_flip', 'n_flip'])
 
     for i in range(len(theory_data)):
-        writer.writerow(theory_data[i] + fit_data[i])
+        writer.writerow(theory_data[i] + fit_data_normal[i] + fit_data_flip[i])
