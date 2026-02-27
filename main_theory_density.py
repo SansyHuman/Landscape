@@ -226,17 +226,17 @@ def density_inverse():
 
 
 def density_log():
-    min_log_24a = np.log(24 * min_a)
-    max_log_24a = np.log(24 * max_a)
-    min_log_48c = np.log(48 * min_c)
-    max_log_48c = np.log(48 * max_c)
+    min_log_48a = np.log(48 * min_a)
+    max_log_48a = np.log(48 * max_a)
+    min_log_24c = np.log(24 * min_c)
+    max_log_24c = np.log(24 * max_c)
 
     grid_size = float(input("Enter grid size: "))
 
-    grid_min_a = float(int(min_log_24a))
-    grid_max_a = float(int(np.log(24 * (max_a * np.e))))
-    grid_min_c = float(int(min_log_48c))
-    grid_max_c = float(int(np.log(48 * (max_c * np.e))))
+    grid_min_a = float(int(min_log_48a))
+    grid_max_a = float(int(np.log(48 * (max_a * np.e))))
+    grid_min_c = float(int(min_log_24c))
+    grid_max_c = float(int(np.log(24 * (max_c * np.e))))
 
     na = np.array(np.arange(grid_min_a, grid_max_a, grid_size))
     nc = np.array(np.arange(grid_min_c, grid_max_c, grid_size))
@@ -246,7 +246,7 @@ def density_log():
     max_density = 0.0
 
     for ac in ac_data:
-        a_index, c_index = int((np.log(24 * ac[0]) - grid_min_a) / grid_size), int((np.log(48 * ac[1]) - grid_min_c) / grid_size)
+        a_index, c_index = int((np.log(48 * ac[0]) - grid_min_a) / grid_size), int((np.log(24 * ac[1]) - grid_min_c) / grid_size)
         Density[c_index, a_index] += 1.0
         if Density[c_index, a_index] > max_density:
             max_density = Density[c_index, a_index]
@@ -275,10 +275,10 @@ def density_log():
 
     with open(f'./data/landscape_log_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.csv', 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile)
-        csvwriter.writerow(['log 24a', 'log 48c', 'min a', 'max a', 'min c', 'max c', 'density', 'real density'])
+        csvwriter.writerow(['log 48a', 'log 24c', 'min a', 'max a', 'min c', 'max c', 'density', 'real density'])
         for i in range(len(local_max_a)):
-            real_a_range = (np.exp(local_max_a[i]) / 24, np.exp(local_max_a[i] + grid_size) / 24)
-            real_c_range = (np.exp(local_max_c[i]) / 48, np.exp(local_max_c[i] + grid_size) / 48)
+            real_a_range = (np.exp(local_max_a[i]) / 48, np.exp(local_max_a[i] + grid_size) / 48)
+            real_c_range = (np.exp(local_max_c[i]) / 24, np.exp(local_max_c[i] + grid_size) / 24)
             real_da = real_a_range[1] - real_a_range[0]
             real_dc = real_c_range[1] - real_c_range[0]
             real_density = local_max_density[i] * (grid_size * grid_size) / (real_da * real_dc)
@@ -296,8 +296,8 @@ def density_log():
     ax.set_title(f'Grid size: {grid_size}')
     ax.plot_surface(A, C, log_density, cmap=cm.coolwarm)
     ax.contour(A, C, log_density, zdir='z', offset=-10, cmap='coolwarm')
-    ax.set_xlabel('log 24a')
-    ax.set_ylabel('log 48c')
+    ax.set_xlabel('log 48a')
+    ax.set_ylabel('log 24c')
     ax.set_zlabel('log (Density + 1)')
     ax.set_zlim(-10, np.log(max_density + 1))
 
@@ -306,8 +306,8 @@ def density_log():
     pos = ax.imshow(log_density, extent=[na[0], na[-1], nc[0], nc[-1]], cmap=cm.coolwarm, origin='lower')
     fig.colorbar(pos, ax=ax)
     ax.plot(local_max_a, local_max_c, 'gx')
-    ax.set_xlabel('log 24a')
-    ax.set_ylabel('log 48c')
+    ax.set_xlabel('log 48a')
+    ax.set_ylabel('log 24c')
 
     plt.savefig(f'./data/landscape_log_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.png')
 
