@@ -65,10 +65,10 @@ plt.rcParams['font.size'] = 15
 def density_unnormalized():
     grid_size = float(input("Enter grid size: "))
 
-    grid_min_a = float(int(min_a))
-    grid_max_a = float(int(max_a) + 1)
-    grid_min_c = float(int(min_c))
-    grid_max_c = float(int(max_c) + 1)
+    grid_min_a = min_a
+    grid_max_a = max_a + grid_size
+    grid_min_c = min_c
+    grid_max_c = max_c + grid_size
 
     na = np.array(np.arange(grid_min_a, grid_max_a, grid_size))
     nc = np.array(np.arange(grid_min_c, grid_max_c, grid_size))
@@ -104,7 +104,7 @@ def density_unnormalized():
         local_max_c.append(c)
         local_max_density.append(density)
 
-    with open(f'./data/landscape_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.csv', 'w', newline='') as csvfile:
+    with open(f'./data/{filename}_landscape_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.csv', 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(['a', 'c', 'density'])
         for i in range(len(local_max_a)):
@@ -132,7 +132,7 @@ def density_unnormalized():
     ax.set_xlabel('a')
     ax.set_ylabel('c')
 
-    plt.savefig(f'./data/landscape_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.png')
+    plt.savefig(f'./data/{filename}_landscape_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.png')
 
     plt.show()
 
@@ -145,10 +145,10 @@ def density_inverse():
 
     grid_size = float(input("Enter grid size: "))
 
-    grid_min_a = float(int(min_inverse_a))
-    grid_max_a = float(int(max_inverse_a) + 1)
-    grid_min_c = float(int(min_inverse_c))
-    grid_max_c = float(int(max_inverse_c) + 1)
+    grid_min_a = min_inverse_a
+    grid_max_a = max_inverse_a + grid_size
+    grid_min_c = min_inverse_c
+    grid_max_c = max_inverse_c + grid_size
 
     na = np.array(np.arange(grid_min_a, grid_max_a, grid_size))
     nc = np.array(np.arange(grid_min_c, grid_max_c, grid_size))
@@ -184,7 +184,7 @@ def density_inverse():
         local_max_c.append(c)
         local_max_density.append(density)
 
-    with open(f'./data/landscape_inverse_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.csv', 'w', newline='') as csvfile:
+    with open(f'./data/{filename}_landscape_inverse_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.csv', 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(['1/a', '1/c', 'min a', 'max a', 'min c', 'max c', 'density', 'real density'])
         for i in range(len(local_max_a)):
@@ -220,7 +220,7 @@ def density_inverse():
     ax.set_xlabel('1/a')
     ax.set_ylabel('1/c')
 
-    plt.savefig(f'./data/landscape_inverse_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.png')
+    plt.savefig(f'./data/{filename}_landscape_inverse_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.png')
 
     plt.show()
 
@@ -233,10 +233,10 @@ def density_log():
 
     grid_size = float(input("Enter grid size: "))
 
-    grid_min_a = float(int(min_log_48a))
-    grid_max_a = float(int(np.log(48 * (max_a * np.e))))
-    grid_min_c = float(int(min_log_24c))
-    grid_max_c = float(int(np.log(24 * (max_c * np.e))))
+    grid_min_a = min_log_48a
+    grid_max_a = max_log_48a + grid_size
+    grid_min_c = min_log_24c
+    grid_max_c = max_log_24c + grid_size
 
     na = np.array(np.arange(grid_min_a, grid_max_a, grid_size))
     nc = np.array(np.arange(grid_min_c, grid_max_c, grid_size))
@@ -273,7 +273,7 @@ def density_log():
         local_max_c.append(c)
         local_max_density.append(density)
 
-    with open(f'./data/landscape_log_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.csv', 'w', newline='') as csvfile:
+    with open(f'./data/{filename}_landscape_log_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.csv', 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(['log 48a', 'log 24c', 'min a', 'max a', 'min c', 'max c', 'density', 'real density'])
         for i in range(len(local_max_a)):
@@ -309,7 +309,7 @@ def density_log():
     ax.set_xlabel('log 48a')
     ax.set_ylabel('log 24c')
 
-    plt.savefig(f'./data/landscape_log_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.png')
+    plt.savefig(f'./data/{filename}_landscape_log_ac_density_grid_{grid_size}_maxima_distance_{min_maxima_distance}.png')
 
     plt.show()
 
