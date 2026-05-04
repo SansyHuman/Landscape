@@ -9,6 +9,7 @@ from torch.utils.data import Dataset
 from torch_geometric.data import Data
 import torch
 import numpy as np
+import polars as pl
 
 
 def prime_numbers(n: int) -> list[int]:
@@ -443,3 +444,38 @@ class PairData(Data):
         return super().__inc__(key, value, *args, **kwargs)
 
 
+def balanced_sample_theories(df: pl.DataFrame, theory_col: str, a_col: str, c_col: str,
+                    min_a: float, max_a: float, min_c: float, max_c: float,
+                    n_per_theory: int) -> pl.DataFrame:
+    """
+    Pick data evenly from different theories within a numerical central charge range,
+    excluding categories with fewer than n_per_theory rows.
+    """
+
+    # Filter rows within the label range
+    filtered = df.filter((pl.col(a_col) >= min_a) & (pl.col(a_col) < max_a)
+                         & (pl.col(c_col) >= min_c) & (pl.col(c_col) < max_c))
+
+    # Add a random number column for shuffling
+    shuffled = filtered.with_columns(
+        pl.Series(np.random.rand(len(filtered))).alias("rand")
+    )
+
+    # Count rows per category
+    counts = shuffled.group_by(theory_col).agg(pl.len().alias("cnt"))
+
+    # Extract valid categories as a Series
+    valid_categories = counts.filter(pl.col("cnt") >= n_per_theory)[theory_col]
+
+    # Keep only rows from valid categories
+    shuffled = shuffled.filter(pl.col(theory_col).is_in(valid_categories.to_list()))
+
+    # Rank rows within each category by random number
+    ranked = shuffled.with_columns(
+        pl.col("rand").rank("dense").over(theory_col).alias("rank")
+    )
+
+    # Keep only the first n_per_category per group
+    sampled = ranked.filter(pl.col("rank") <= n_per_theory)
+
+    return sampled.drop("rand", "rank")
