@@ -1,17 +1,25 @@
+from typing import Union, Self
+
 import polars as pl
 import numpy as np
 import matplotlib.pyplot as plt
 import math
 
+from common.utils import balanced_sample_theories
 
-class TheorySampler():
+
+class TheorySampler:
     """
     Class to sample theories evenly.
     """
-    def __init__(self, filename: str):
-        self.filename = filename
-        self.df = pl.read_csv(self.filename)
-        print(self.df)
+    def __init__(self, filename: Union[str, None]=None):
+        if filename is not None:
+            self.filename = filename
+            self.df = pl.read_csv(self.filename)
+            print(self.df)
+        else:
+            self.filename = None
+            self.df = None
 
     def a_range(self) -> float:
         """
@@ -58,3 +66,25 @@ class TheorySampler():
         ax[1].set_ylabel("count")
 
         plt.show()
+
+    def get_theory_stats(self) -> pl.DataFrame:
+        counts = self.df.group_by("Name").agg(pl.count())
+
+        # Sort by count in descending order
+        sorted_counts = counts.sort("count", descending=True)
+
+        return sorted_counts
+
+    def get_balanced_sample(self, a_range: tuple[float, float], c_range: tuple[float, float],
+                            n_per_theory: int) -> Self:
+        sample = TheorySampler()
+        sample.filename = self.filename
+
+        assert self.df is not None
+        sample.df = balanced_sample_theories(self.df, "Name", "CentralChargeA", "CentralChargeC",
+                                             a_range[0], a_range[1], c_range[0], c_range[1], n_per_theory)
+
+        return sample
+
+    def __str__(self) -> str:
+        return str(self.df)
