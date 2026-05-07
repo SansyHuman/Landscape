@@ -86,5 +86,8 @@ class TheorySampler:
 
         return sample
 
+    def get_theory_num(self) -> int:
+        return self.df["Name"].n_unique()
+
     def __str__(self) -> str:
         return str(self.df)
