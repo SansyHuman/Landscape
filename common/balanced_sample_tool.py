@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 
-from common.utils import balanced_sample_theories
+from common.utils import balanced_sample_theories, manual_sample_theories
 
 
 class TheorySampler:
@@ -16,7 +16,6 @@ class TheorySampler:
         if filename is not None:
             self.filename = filename
             self.df = pl.read_csv(self.filename)
-            print(self.df)
         else:
             self.filename = None
             self.df = None
@@ -83,6 +82,15 @@ class TheorySampler:
         assert self.df is not None
         sample.df = balanced_sample_theories(self.df, "Name", "CentralChargeA", "CentralChargeC",
                                              a_range[0], a_range[1], c_range[0], c_range[1], n_per_theory)
+
+        return sample
+
+    def get_manual_sample(self, theories: list[str], n_per_theory: int) -> Self:
+        sample = TheorySampler()
+        sample.filename = self.filename
+
+        assert self.df is not None
+        sample.df = manual_sample_theories(self.df, "Name", "CentralChargeA", "CentralChargeC", theories, n_per_theory)
 
         return sample
 

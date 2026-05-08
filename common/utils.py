@@ -479,3 +479,38 @@ def balanced_sample_theories(df: pl.DataFrame, theory_col: str, a_col: str, c_co
     sampled = ranked.filter(pl.col("rank") <= n_per_theory)
 
     return sampled.drop("rand", "rank")
+
+
+def manual_sample_theories(df: pl.DataFrame, theory_col: str, a_col: str, c_col: str,
+                    theories: list[str], n_per_theory: int) -> pl.DataFrame:
+    """
+    Pick data evenly from specified theories,
+    excluding categories with fewer than n_per_theory rows.
+    """
+
+    # Filter rows with specified theories
+    filtered = df.filter(pl.col("Name").is_in(theories))
+
+    # Add a random number column for shuffling
+    shuffled = filtered.with_columns(
+        pl.Series(np.random.rand(len(filtered))).alias("rand")
+    )
+
+    # Count rows per category
+    counts = shuffled.group_by(theory_col).agg(pl.len().alias("cnt"))
+
+    # Extract valid categories as a Series
+    valid_categories = counts.filter(pl.col("cnt") >= n_per_theory)[theory_col]
+
+    # Keep only rows from valid categories
+    shuffled = shuffled.filter(pl.col(theory_col).is_in(valid_categories.to_list()))
+
+    # Rank rows within each category by random number
+    ranked = shuffled.with_columns(
+        pl.col("rand").rank("dense").over(theory_col).alias("rank")
+    )
+
+    # Keep only the first n_per_category per group
+    sampled = ranked.filter(pl.col("rank") <= n_per_theory)
+
+    return sampled.drop("rand", "rank")
