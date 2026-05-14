@@ -1,6 +1,9 @@
 import polars as pl
+import datetime
+from sklearn.kernel_ridge import KernelRidge
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_absolute_error, root_mean_squared_error
+from sklearn.model_selection import KFold, GridSearchCV, cross_val_predict
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures
 
@@ -28,116 +31,214 @@ theory_sampler = TheorySampler(filename)
 for row in theory_sampler.get_theory_stats().iter_rows():
     print(row)
 
-min_a = float(input("Enter minimal value of a central charge: "))
-max_a = float(input("Enter maximal value of a central charge: "))
-min_c = float(input("Enter minimal value of c central charge: "))
-max_c = float(input("Enter maximal value of c central charge: "))
-n_samples = int(input("Enter number of samples per theory: "))
-n_exponents = int(input("Enter number of exponents to use from SCI: "))
-poly_deg = int(input("Enter regression polynomial degree: "))
+GRID_LO = float(input("Enter lower bound of feature grid: "))
+GRID_HI = float(input("Enter upper bound of feature grid: "))
+GRID_STEP = float(input("Enter step size of feature grid: "))
 
-sampled_train = theory_sampler.get_balanced_sample((min_a, max_a), (min_c, max_c), n_samples)
-sampled_test = theory_sampler.get_balanced_sample((min_a, max_a), (min_c, max_c), n_samples)
+GRID = np.arange(GRID_LO, GRID_HI + GRID_STEP, GRID_STEP)
+KDE_BANDWIDTH = float(input("Enter bandwidth of feature grid: "))
 
-poly_feature_a = PolynomialFeatures(degree=poly_deg)
-poly_feature_c = PolynomialFeatures(degree=poly_deg)
-model_a = make_pipeline(poly_feature_a, LinearRegression())
-model_c = make_pipeline(poly_feature_c, LinearRegression())
 
-sample_stat = sampled_train.get_theory_stats()
+def fit_data(sampled: TheorySampler, savefile_suffix: str, show_graph: bool=False, save_dir=None):
+    if save_dir is None:
+        save_dir = "../data/regression"
+    os.makedirs(save_dir, exist_ok=True)
 
-n_theory = sampled_train.get_theory_num()
-theories = sample_stat["Name"].to_list()
-print("The number of theories in the sample: ", n_theory)
-print("Theories in the sample: ", theories)
+    sample_stat = sampled.get_theory_stats()
 
-theories_dict = dict()
-for i in range(len(theories)):
-    theories_dict[theories[i]] = i
+    n_theory = sampled.get_theory_num()
+    theories = sample_stat["Name"].to_list()
+    print("The number of theories in the sample: ", n_theory)
+    print("Theories in the sample: ", theories)
 
-train_num = sampled_train.df.height
-train_input = []
-train_a = []
-train_c = []
+    theories_dict = dict()
+    for i in range(len(theories)):
+        theories_dict[theories[i]] = i
 
-for i in range(train_num):
-    train_a.append(float(sampled_train.df["CentralChargeA"][i]))
-    train_c.append(float(sampled_train.df["CentralChargeC"][i]))
-    sci = SuperConformalIndex(sampled_train.df["SCI"][i])
-    exp_data = [sci.dims[j] if j < len(sci.dims) else 0 for j in range(n_exponents)]
-    train_input.append(exp_data)
+    data_num = sampled.df.height
+    X = []
+    a = []
+    c = []
+    theory_data = []
 
-test_num = sampled_test.df.height
-test_theory = []
-test_input = []
-test_a = []
-test_c = []
+    for i in range(data_num):
+        theory_data.append(theories_dict[sampled.df["Name"][i]])
+        a.append(float(sampled.df["CentralChargeA"][i]))
+        c.append(float(sampled.df["CentralChargeC"][i]))
+        sci = SuperConformalIndex(sampled.df["SCI"][i])
+        X.append(sci.featurize_dimensions(GRID, KDE_BANDWIDTH))
+    X = np.asarray(X)
+    a = np.asarray(a)
+    c = np.asarray(c)
+    theory_data = np.asarray(theory_data)
 
-for i in range(test_num):
-    test_theory.append(theories_dict[sampled_test.df["Name"][i]])
-    test_a.append(float(sampled_test.df["CentralChargeA"][i]))
-    test_c.append(float(sampled_test.df["CentralChargeC"][i]))
-    sci = SuperConformalIndex(sampled_test.df["SCI"][i])
-    exp_data = [sci.dims[j] if j < len(sci.dims) else 0 for j in range(n_exponents)]
-    test_input.append(exp_data)
+    krr_a = KernelRidge(kernel='rbf')
+    krr_c = KernelRidge(kernel='rbf')
+    krr_grid = {
+        "alpha": np.logspace(-4, 0, 9),
+        "gamma": np.logspace(-5, -1, 9),
+    }
 
-model_a.fit(train_input, train_a)
-model_c.fit(train_input, train_c)
+    cv = KFold(n_splits=5, shuffle=True, random_state=42)
 
-test_a_pred = model_a.predict(test_input)
-test_c_pred = model_c.predict(test_input)
-r2_a = r2_score(test_a, test_a_pred)
-r2_c = r2_score(test_c, test_c_pred)
+    krr_search_a = GridSearchCV(
+        krr_a,
+        krr_grid,
+        cv=cv,
+        scoring='r2',
+        n_jobs=-1
+    )
+    krr_search_c = GridSearchCV(
+        krr_c,
+        krr_grid,
+        cv=cv,
+        scoring='r2',
+        n_jobs=-1
+    )
 
-r2_per_theory = [[0.0, 0.0] for _ in range(n_theory)]
-test_a_per_theory = [[] for _ in range(n_theory)]
-test_c_per_theory = [[] for _ in range(n_theory)]
-test_a_pred_per_theory = [[] for _ in range(n_theory)]
-test_c_pred_per_theory = [[] for _ in range(n_theory)]
+    krr_search_a.fit(X, a)
+    krr_search_c.fit(X, c)
 
-for i in range(test_num):
-    theory_index = test_theory[i]
-    test_a_per_theory[theory_index].append(test_a[i])
-    test_c_per_theory[theory_index].append(test_c[i])
-    test_a_pred_per_theory[theory_index].append(test_a_pred[i])
-    test_c_pred_per_theory[theory_index].append(test_c_pred[i])
+    print('Regression of central charge a')
+    print('=================================')
+    print(f"  best params : {krr_search_a.best_params_}")
+    print(f"  best CV R²  : {krr_search_a.best_score_:.4f}")
+    print()
 
-for i in range(n_theory):
-    r2_per_theory[i][0] = r2_score(test_a_per_theory[i], test_a_pred_per_theory[i])
-    r2_per_theory[i][1] = r2_score(test_c_per_theory[i], test_c_pred_per_theory[i])
+    print('Regression of central charge c')
+    print('=================================')
+    print(f"  best params : {krr_search_c.best_params_}")
+    print(f"  best CV R²  : {krr_search_c.best_score_:.4f}")
+    print()
 
-with open(f'../data/regression/sci_exp_regression_{n_exponents}_({min_a}_{max_a})({min_c}_{max_c})_{n_samples}_{poly_deg}.csv', 'w', newline='') as csv_file:
-    writer = csv.writer(csv_file)
-    writer.writerow(['Theory', "R2 of a", "R2 of c"])
+    a_pred = cross_val_predict(
+        krr_search_a.best_estimator_,
+        X,
+        a,
+        cv=cv,
+        n_jobs=-1
+    )
+    c_pred = cross_val_predict(
+        krr_search_c.best_estimator_,
+        X,
+        c,
+        cv=cv,
+        n_jobs=-1
+    )
+
+    a_per_theory = [[] for _ in range(n_theory)]
+    a_pred_per_theory = [[] for _ in range(n_theory)]
+
+    c_per_theory = [[] for _ in range(n_theory)]
+    c_pred_per_theory = [[] for _ in range(n_theory)]
+
+    for i in range(data_num):
+        theory_index = theory_data[i]
+        a_per_theory[theory_index].append(a[i])
+        c_per_theory[theory_index].append(c[i])
+        a_pred_per_theory[theory_index].append(a_pred[i])
+        c_pred_per_theory[theory_index].append(c_pred[i])
+
+    total_metrics = [] # r2_a, mae_a, rmse_a, r2_c, mae_c, rmse_c
+    metrics_per_theory = [[] for _ in range(n_theory)]
+
+    def _calculate_metric(y_true, y_pred):
+        return r2_score(y_true, y_pred), mean_absolute_error(y_true, y_pred), root_mean_squared_error(y_true, y_pred)
+
+    total_metrics.extend(_calculate_metric(a, a_pred))
+    total_metrics.extend(_calculate_metric(c, c_pred))
     for i in range(n_theory):
-        writer.writerow([theories[i]] + r2_per_theory[i])
+        metrics_per_theory[i].extend(_calculate_metric(a_per_theory[i], a_pred_per_theory[i]))
+        metrics_per_theory[i].extend(_calculate_metric(c_per_theory[i], c_pred_per_theory[i]))
 
-plt.style.use('default')
-plt.rcParams['figure.figsize'] = (16, 12)
-plt.rcParams['font.size'] = 15
+    with open(f'{save_dir}/sci_exp_regression_{savefile_suffix}.csv', 'w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(['Theory', "R2 of a", "MAE of a", "RMSE of a", "R2 of c", "MAE of c", "RMSE of c"])
+        writer.writerow(['Total'] + total_metrics)
+        for i in range(n_theory):
+            writer.writerow([theories[i]] + metrics_per_theory[i])
 
-fig, ax = plt.subplots(nrows=1, ncols=2, squeeze=True)
+    plt.style.use('default')
+    plt.rcParams['figure.figsize'] = (16, 12)
+    plt.rcParams['font.size'] = 15
 
-fig.suptitle(f'Regression of a/c central charge with SCI exponents\nwith {n_exponents} fit upto {poly_deg} degrees terms')
+    plt.close('all')
 
-ax[0].set_title(f'a regression R2={r2_a:.3f}')
-cmap = plt.cm.get_cmap('jet', n_theory)
-for i in range(n_theory):
-    ax[0].scatter(test_a_per_theory[i], test_a_pred_per_theory[i], color=cmap(i), label=theories[i])
-a_range = [min_a, max_a]
-ax[0].plot(a_range, a_range, linestyle='--', color='red', label='Exact')
-ax[0].set_xlabel('Real a')
-ax[0].set_ylabel('Predicted a')
-ax[0].legend()
+    cmap = plt.cm.get_cmap('jet', n_theory)
 
-ax[1].set_title(f'c regression R2={r2_c:.3f}')
-for i in range(n_theory):
-    ax[1].scatter(test_c_per_theory[i], test_c_pred_per_theory[i], color=cmap(i), label=theories[i])
-c_range = [min_c, max_c]
-ax[1].plot(c_range, c_range, linestyle='--', color='red', label='Exact')
-ax[1].set_xlabel('Real c')
-ax[1].set_ylabel('Predicted c')
-ax[1].legend()
+    fig, ax = plt.subplots(nrows=1, ncols=2, squeeze=True)
 
-plt.savefig(f'../data/regression/sci_exp_regression_{n_exponents}_({min_a}_{max_a})({min_c}_{max_c})_{n_samples}_{poly_deg}.png')
-plt.show()
+    fig.suptitle(f'Regression of a/c central charge with SCI exponents')
+
+    ax[0].set_title(f'a regression R2={total_metrics[0]:.3f}')
+    for i in range(n_theory):
+        ax[0].scatter(a_per_theory[i], a_pred_per_theory[i], color=cmap(i), label=theories[i])
+    a_range = [np.min(a), np.max(a)]
+    ax[0].plot(a_range, a_range, linestyle='--', color='red', label='Exact')
+    ax[0].set_xlabel('Real a')
+    ax[0].set_ylabel('Predicted a')
+    ax[0].legend()
+
+    ax[1].set_title(f'c regression R2={total_metrics[3]:.3f}')
+    for i in range(n_theory):
+        ax[1].scatter(c_per_theory[i], c_pred_per_theory[i], color=cmap(i), label=theories[i])
+    c_range = [np.min(c), np.max(c)]
+    ax[1].plot(c_range, c_range, linestyle='--', color='red', label='Exact')
+    ax[1].set_xlabel('Real c')
+    ax[1].set_ylabel('Predicted c')
+    ax[1].legend()
+
+    plt.savefig(f'{save_dir}/sci_exp_regression_{savefile_suffix}.png')
+
+    if show_graph:
+        plt.show()
+
+
+def regression_charge_range():
+    min_a = float(input("Enter minimal value of a central charge: "))
+    max_a = float(input("Enter maximal value of a central charge: "))
+    min_c = float(input("Enter minimal value of c central charge: "))
+    max_c = float(input("Enter maximal value of c central charge: "))
+    n_samples = int(input("Enter number of samples per theory: "))
+    n_iter = int(input("Enter number of iterations: "))
+
+    save_dir = f"../data/regression/{datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")}"
+    save_suffix = f'({min_a}_{max_a})({min_c}_{max_c})_{n_samples}'
+
+    for i in range(n_iter):
+        sampled = theory_sampler.get_balanced_sample((min_a, max_a), (min_c, max_c), n_samples)
+        fit_data(sampled, save_suffix + f'_{i + 1}', save_dir=save_dir, show_graph=i == n_iter - 1)
+
+
+def regression_manual_selection():
+    selected = []
+    print('Write all theories you want to choose separated with comma.')
+    theories = input('>>>').split(',')
+    for theory in theories:
+        selected.append(theory.strip())
+    selected = sorted(selected)
+
+    n_samples = int(input("Enter number of samples per theory: "))
+    n_iter = int(input("Enter number of iterations: "))
+
+    save_dir = f"../data/regression/{datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")}"
+    save_suffix = f'{selected}_{n_samples}'
+
+    for i in range(n_iter):
+        sampled = theory_sampler.get_manual_sample(selected, n_samples)
+        fit_data(sampled, save_suffix + f'_{i + 1}', save_dir=save_dir, show_graph=i == n_iter - 1)
+
+
+while True:
+    print('Select program...')
+    print('1. Select theories within the central charge range')
+    print('2. Select theories manually')
+    print('-1. Exit')
+    program = int(input('>>>'))
+
+    if program == 1:
+        regression_charge_range()
+    elif program == 2:
+        regression_manual_selection()
+    else:
+        exit()
