@@ -37,43 +37,6 @@ GRID = np.arange(GRID_LO, GRID_HI + GRID_STEP, GRID_STEP)
 KDE_BANDWIDTH = float(input("Enter bandwidth of feature grid: "))
 
 
-def featurize(vec):
-    v = np.asarray(sorted(vec), dtype=float)
-    if v.size == 0:
-        return np.zeros(len(GRID) + 7 + 9)
-
-    d = (GRID[None, :] - v[:, None]) / KDE_BANDWIDTH
-    kde = np.exp(-0.5 * d * d).sum(axis=0)
-    kde /= kde.sum() * GRID_STEP + 1e-12
-
-    uniq = np.unique(v.round(4))
-    gaps = np.diff(uniq) if uniq.size > 1 else np.array([0.0])
-    gap_feat = [
-        gaps.min(),
-        gaps.max(),
-        gaps.mean(),
-        gaps.std(),
-        np.median(gaps),
-        np.quantile(gaps, 0.25),
-        np.quantile(gaps, 0.75),
-    ]
-
-    # Why is there length of exponents vector and log of length together?
-    summary = [
-        len(v),
-        np.log(len(v)),
-        v.mean(),
-        v.std(),
-        v.min(),
-        v.max(),
-        np.median(v),
-        np.quantile(v, 0.25),
-        np.quantile(v, 0.75),
-    ]
-
-    return np.concatenate([kde, gap_feat, summary])
-
-
 def cluster_data(sampled: TheorySampler, savefile_suffix: str, show_graph: bool=False, save_dir=None):
     if save_dir is None:
         save_dir = "../data/clustering"
@@ -92,14 +55,13 @@ def cluster_data(sampled: TheorySampler, savefile_suffix: str, show_graph: bool=
 
     data_num = sampled.df.height
     theory_data = []
-    sci_exp_data = []
+    sci_data: list[SuperConformalIndex] = []
 
     for i in range(data_num):
         theory_data.append(theories_dict[sampled.df["Name"][i]])
-        sci = SuperConformalIndex(sampled.df["SCI"][i])
-        sci_exp_data.append(sci.dims)
+        sci_data.append(SuperConformalIndex(sampled.df["SCI"][i]))
 
-    X = np.stack([featurize(sci_exp_data[i]) for i in range(data_num)])
+    X = np.stack([sci_data[i].featurize_dimensions(GRID, KDE_BANDWIDTH) for i in range(data_num)])
     y_true = np.asarray(theory_data)
 
     Xs = StandardScaler().fit_transform(X)

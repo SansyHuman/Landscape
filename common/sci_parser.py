@@ -60,3 +60,48 @@ class SuperConformalIndex:
         self.relevant_dims.sort()
         # smallest dimension among all operators
         self.smallest_dim = self.relevant_dims[0]
+
+    def featurize_dimensions(self, grid: np.ndarray, kde_bandwidth: float) -> np.ndarray:
+        """
+        Gets the feature vector of dimensions of the spectrum.
+        :param grid: vector of grid values. It should be a vector of sequential numbers
+        with constant steps.
+        :param kde_bandwidth: bandwidth of the feature grid.
+        :return: feature vector of dimensions of the spectrum.
+        """
+        grid_step = grid[1] - grid[0]
+
+        v = np.asarray(sorted(self.dims), dtype=float)
+        if v.size == 0:
+            return np.zeros(len(grid) + 7 + 9)
+
+        d = (grid[None, :] - v[:, None]) / kde_bandwidth
+        kde = np.exp(-0.5 * d * d).sum(axis=0)
+        kde /= kde.sum() * grid_step + 1e-12
+
+        uniq = np.unique(v.round(4))
+        gaps = np.diff(uniq) if uniq.size > 1 else np.array([0.0])
+        gap_feat = [
+            gaps.min(),
+            gaps.max(),
+            gaps.mean(),
+            gaps.std(),
+            np.median(gaps),
+            np.quantile(gaps, 0.25),
+            np.quantile(gaps, 0.75),
+        ]
+
+        # Why is there length of exponents vector and log of length together?
+        summary = [
+            len(v),
+            np.log(len(v)),
+            v.mean(),
+            v.std(),
+            v.min(),
+            v.max(),
+            np.median(v),
+            np.quantile(v, 0.25),
+            np.quantile(v, 0.75),
+        ]
+
+        return np.concatenate([kde, gap_feat, summary])
